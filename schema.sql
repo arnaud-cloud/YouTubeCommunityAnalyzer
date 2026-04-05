@@ -98,13 +98,14 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 CREATE TABLE IF NOT EXISTS video_summaries (
-    video_id            TEXT PRIMARY KEY,
-    channel_id          TEXT NOT NULL,
-    summary_json        TEXT,
-    comment_count       INTEGER,
-    gossip_count        INTEGER,
-    processed_at        TEXT DEFAULT (datetime('now')),
-    llm_backend         TEXT,
+    video_id                    TEXT PRIMARY KEY,
+    channel_id                  TEXT NOT NULL,
+    summary_json                TEXT,
+    comment_count               INTEGER,
+    gossip_count                INTEGER,
+    processed_at                TEXT DEFAULT (datetime('now')),
+    llm_backend                 TEXT,
+    last_comment_published_at   TEXT,
     FOREIGN KEY (video_id) REFERENCES videos(video_id)
 );
 

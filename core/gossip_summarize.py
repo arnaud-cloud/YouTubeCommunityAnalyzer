@@ -1,8 +1,10 @@
 """
-Gossip summarizer — Step 2: LLM per-video gossip extraction.
+Gossip summarizer — Step 2: LLM batch gossip extraction.
 
-Reads raw comments from SQLite, sends them to the configured LLM,
-stores structured results. Incremental: already-summarised videos skipped.
+Groups pending videos into buffer-sized batches (reducing LLM calls and
+avoiding per-video truncation), sends each batch in a single LLM call, and
+tracks last_comment_published_at for incremental processing — only videos
+with new comments since the last run are re-processed.
 """
 
 from __future__ import annotations
@@ -17,10 +19,58 @@ from .llm_client import LLMClient, _settings_to_llm_config
 
 log = logging.getLogger(__name__)
 
-PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "extract_gossip.txt"
+PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "extract_gossip_batch.txt"
+DEFAULT_BUFFER_CHARS = 120_000
 
 
-def _load_comments_for_video(conn, video_id: str) -> list[dict]:
+# ── Querying pending videos ────────────────────────────────────────────────────
+
+def _get_pending_videos(conn, channel_ids: list[str],
+                        force: bool = False) -> list[dict]:
+    """
+    Return videos that need (re)summarizing.
+
+    force=False (incremental):
+      - never summarized yet
+      - summarized but last_comment_published_at is not tracked (NULL)
+      - new comments arrived after last_comment_published_at
+
+    force=True: all videos that have at least one comment.
+    """
+    placeholders = ",".join("?" * len(channel_ids))
+    if force:
+        q = f"""
+            SELECT v.video_id, v.channel_id, v.title, v.published_at
+            FROM videos v
+            WHERE v.channel_id IN ({placeholders})
+              AND EXISTS (SELECT 1 FROM comments c WHERE c.video_id = v.video_id)
+            ORDER BY v.published_at DESC
+        """
+        return [dict(r) for r in conn.execute(q, channel_ids).fetchall()]
+
+    q = f"""
+        SELECT v.video_id, v.channel_id, v.title, v.published_at
+        FROM videos v
+        LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
+        WHERE v.channel_id IN ({placeholders})
+          AND EXISTS (SELECT 1 FROM comments c WHERE c.video_id = v.video_id)
+          AND (
+            vs.video_id IS NULL
+            OR vs.last_comment_published_at IS NULL
+            OR EXISTS (
+                SELECT 1 FROM comments c
+                WHERE c.video_id = v.video_id
+                  AND c.published_at > vs.last_comment_published_at
+            )
+          )
+        ORDER BY v.published_at DESC
+    """
+    return [dict(r) for r in conn.execute(q, channel_ids).fetchall()]
+
+
+# ── Comment loading ────────────────────────────────────────────────────────────
+
+def _load_comments(conn, video_id: str) -> list[dict]:
     rows = conn.execute(
         """SELECT comment_id, author_name, text, like_count,
                   published_at, is_reply, parent_id
@@ -32,61 +82,110 @@ def _load_comments_for_video(conn, video_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def _format_comments_for_llm(comments: list[dict],
-                              max_chars: int = 80_000) -> str:
-    lines = []
-    total = 0
+# ── Batch construction ─────────────────────────────────────────────────────────
+
+def _format_video_block(video_id: str, channel_id: str,
+                        title: str, comments: list[dict]) -> str:
+    """Format one video as a labelled block for inclusion in a batch prompt."""
+    lines = [
+        f"=== VIDEO: {video_id} ===",
+        f"CHANNEL: {channel_id}",
+        f"TITLE: {title}",
+        f"COMMENTS ({len(comments)} total):",
+        "",
+    ]
     for c in comments:
         prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
-        line = (
+        lines.append(
             f"{prefix}[id={c['comment_id']} likes={c['like_count']}] "
             f"{c['author_name']}: {c['text']}"
         )
-        if total + len(line) > max_chars:
-            lines.append(f"... (truncated, {len(comments) - len(lines)} more)")
-            break
-        lines.append(line)
-        total += len(line)
+    lines.append("")
     return "\n".join(lines)
 
 
-def _verify_evidence(conn, summary: dict, video_id: str) -> dict:
-    valid_ids = {
-        row[0] for row in conn.execute(
-            "SELECT comment_id FROM comments WHERE video_id = ?", (video_id,)
-        )
-    }
-    verified_items = []
-    dropped = 0
-    for item in summary.get("gossip_items", []):
-        evidence = item.get("evidence_comment_ids", [])
-        if not evidence:
-            dropped += 1
-            continue
-        verified = [eid for eid in evidence if eid in valid_ids]
-        if not verified:
-            dropped += 1
-            continue
-        item["evidence_comment_ids"] = verified
-        verified_items.append(item)
-    if dropped:
-        log.info(f"  Verification: dropped {dropped} unverifiable gossip items")
-    summary["gossip_items"] = verified_items
-    return summary
+# VideoItem = (video_id, channel_id, title, comments, max_published_at, block_text)
+_VI_ID    = 0
+_VI_CID   = 1
+_VI_TITLE = 2
+_VI_COMMS = 3
+_VI_MAXDT = 4
+_VI_BLOCK = 5
 
 
-def _save_summary(conn, video_id: str, channel_id: str,
-                  summary: dict, backend: str):
-    gossip_items = summary.get("gossip_items", [])
+def _build_batches(video_items: list[tuple], buffer_chars: int) -> list[list[tuple]]:
+    """
+    Group video items into batches each fitting within buffer_chars.
+    A single video that exceeds the buffer is still sent alone.
+    """
+    batches: list[list[tuple]] = []
+    current: list[tuple] = []
+    current_size = 0
+
+    for item in video_items:
+        block_size = len(item[_VI_BLOCK])
+        if current and current_size + block_size > buffer_chars:
+            batches.append(current)
+            current = [item]
+            current_size = block_size
+        else:
+            current.append(item)
+            current_size += block_size
+
+    if current:
+        batches.append(current)
+    return batches
+
+
+# ── Evidence verification ──────────────────────────────────────────────────────
+
+def _verify_evidence(conn, summaries: list[dict]) -> list[dict]:
+    """Drop gossip items whose evidence comment IDs don't exist in the DB."""
+    verified = []
+    for s in summaries:
+        video_id = s.get("video_id", "")
+        valid_ids = {
+            row[0] for row in conn.execute(
+                "SELECT comment_id FROM comments WHERE video_id = ?", (video_id,)
+            )
+        }
+        ok_items, dropped = [], 0
+        for item in s.get("gossip_items", []):
+            evidence = item.get("evidence_comment_ids", [])
+            if not evidence:
+                dropped += 1
+                continue
+            good = [eid for eid in evidence if eid in valid_ids]
+            if not good:
+                dropped += 1
+                continue
+            item["evidence_comment_ids"] = good
+            ok_items.append(item)
+        if dropped:
+            log.info(f"  [{video_id}] Dropped {dropped} unverifiable gossip items")
+        s["gossip_items"] = ok_items
+        verified.append(s)
+    return verified
+
+
+# ── Persistence ────────────────────────────────────────────────────────────────
+
+def _save_result(conn, summary: dict, backend: str,
+                 max_published_at: str | None, comment_count: int) -> None:
+    """Persist one video's LLM result and update last_comment_published_at."""
+    video_id  = summary["video_id"]
+    channel_id = summary.get("channel_id", "")
+    gossip_items    = summary.get("gossip_items", [])
     entity_mentions = summary.get("entities_mentioned", [])
 
     conn.execute(
         """INSERT OR REPLACE INTO video_summaries
                (video_id, channel_id, summary_json, comment_count,
-                gossip_count, processed_at, llm_backend)
-           VALUES (?, ?, ?, ?, ?, datetime('now'), ?)""",
+                gossip_count, processed_at, llm_backend,
+                last_comment_published_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'), ?, ?)""",
         (video_id, channel_id, json.dumps(summary),
-         summary.get("_comment_count", 0), len(gossip_items), backend),
+         comment_count, len(gossip_items), backend, max_published_at),
     )
 
     conn.execute("DELETE FROM gossip_items WHERE video_id = ?", (video_id,))
@@ -121,33 +220,25 @@ def _save_summary(conn, video_id: str, channel_id: str,
     conn.commit()
 
 
-def _get_pending_videos(conn, channel_ids: list[str],
-                        force: bool = False) -> list[dict]:
-    placeholders = ",".join("?" * len(channel_ids))
-    if force:
-        q = f"""SELECT v.video_id, v.channel_id, v.title, v.published_at
-                FROM videos v WHERE v.channel_id IN ({placeholders})
-                ORDER BY v.published_at DESC"""
-        return [dict(r) for r in conn.execute(q, channel_ids).fetchall()]
-    else:
-        q = f"""SELECT v.video_id, v.channel_id, v.title, v.published_at
-                FROM videos v
-                LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
-                WHERE v.channel_id IN ({placeholders}) AND vs.video_id IS NULL
-                ORDER BY v.published_at DESC"""
-        return [dict(r) for r in conn.execute(q, channel_ids).fetchall()]
-
+# ── Main entry point ───────────────────────────────────────────────────────────
 
 def summarize_community(conn, community_id: int,
                         force: bool = False,
                         progress_callback=None) -> int:
     """
-    Summarize all unsummarized videos for a community.
-    Returns the number of videos processed.
+    Summarize all pending videos for a community using buffer-based LLM batching.
+
+    Videos are grouped into char-limited batches so that:
+    - Videos with few comments share a single LLM call (cheaper)
+    - No video is silently truncated (each batch stays within the configured limit)
+    - Only videos with new comments since the last run are included (incremental)
+
+    Returns the number of videos successfully processed.
     """
     settings = get_all_settings(conn)
     cfg = _settings_to_llm_config(settings)
     llm = LLMClient(cfg, role="summarize")
+    buffer_chars = int(settings.get("llm_summarize_buffer_chars", DEFAULT_BUFFER_CHARS))
 
     alias_json = settings.get("entity_aliases", "{}")
     try:
@@ -160,61 +251,106 @@ def summarize_community(conn, community_id: int,
     if not channel_ids:
         return 0
 
-    videos = _get_pending_videos(conn, channel_ids, force)
-    log.info(f"Found {len(videos)} videos to summarize")
+    pending = _get_pending_videos(conn, channel_ids, force)
+    log.info(f"Found {len(pending)} pending videos to summarize")
+    if not pending:
+        return 0
+
+    # Build video items: load comments, compute max published_at, format block
+    video_items: list[tuple] = []
+    for v in pending:
+        comments = _load_comments(conn, v["video_id"])
+        if not comments:
+            continue
+        dates = [c["published_at"] for c in comments if c.get("published_at")]
+        max_pub = max(dates) if dates else None
+        block = _format_video_block(
+            v["video_id"], v["channel_id"], v.get("title", ""), comments
+        )
+        video_items.append((
+            v["video_id"], v["channel_id"], v.get("title", ""),
+            comments, max_pub, block,
+        ))
+
+    if not video_items:
+        return 0
+
+    batches = _build_batches(video_items, buffer_chars)
+    log.info(f"  -> {len(video_items)} videos in {len(batches)} batches "
+             f"(buffer={buffer_chars:,} chars)")
 
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
     processed = 0
 
-    for i, v in enumerate(videos, 1):
-        video_id = v["video_id"]
-        channel_id = v["channel_id"]
-        title = v.get("title", "")
+    for batch_idx, batch in enumerate(batches, 1):
+        titles_preview = ", ".join(item[_VI_TITLE][:30] for item in batch[:3])
+        if len(batch) > 3:
+            titles_preview += f" +{len(batch) - 3} more"
 
         if progress_callback:
-            progress_callback(f"Summarizing video {i}/{len(videos)}: {title[:50]}")
+            progress_callback(
+                f"Batch {batch_idx}/{len(batches)}: {len(batch)} videos — {titles_preview}"
+            )
 
-        comments = _load_comments_for_video(conn, video_id)
-        if not comments:
-            log.info(f"  [{i}] No comments for {title[:50]}, skipping")
-            continue
+        log.info(f"  Batch {batch_idx}/{len(batches)}: {len(batch)} videos — {titles_preview}")
 
-        log.info(f"  [{i}/{len(videos)}] Summarizing: {title[:70]}")
-        comment_block = _format_comments_for_llm(comments)
         user_prompt = (
-            f"VIDEO ID: {video_id}\n"
-            f"CHANNEL: {channel_id}\n"
-            f"TITLE: {title}\n\n"
-            f"COMMENTS ({len(comments)} total):\n\n"
-            f"{comment_block}\n\n"
-            "IMPORTANT: Respond with valid JSON only. "
-            "Start your response with {{ and end with }}. "
-            "No prose, no explanation, no markdown."
+            f"Process {len(batch)} video(s) below.\n\n"
+            + "".join(item[_VI_BLOCK] for item in batch)
+            + "IMPORTANT: Respond with valid JSON only. "
+              "Start your response with { and end with }. "
+              "No prose, no explanation, no markdown."
         )
 
         try:
-            summary = llm.complete_json(
+            result = llm.complete_json(
                 system_prompt, user_prompt,
                 max_tokens=llm.max_tokens_summarize,
             )
         except Exception as e:
-            log.error(f"  LLM call failed for {video_id}: {e}")
+            log.error(f"  Batch {batch_idx} LLM call failed: {e}")
             continue
 
-        if "entities_mentioned" in summary:
-            summary["entities_mentioned"] = resolver.resolve_list(
-                summary["entities_mentioned"]
-            )
-        for item in summary.get("gossip_items", []):
-            if "subjects" in item:
-                item["subjects"] = resolver.resolve_list(item["subjects"])
+        # Normalise output: accept {"videos": [...]} or bare list or single dict
+        raw = result.get("videos", [])
+        if not isinstance(raw, list):
+            raw = [raw] if isinstance(raw, dict) else []
 
-        summary = _verify_evidence(conn, summary, video_id)
-        summary["_comment_count"] = len(comments)
-        _save_summary(conn, video_id, channel_id, summary, llm.backend)
+        # Index by video_id; warn about unexpected IDs
+        expected_ids = {item[_VI_ID] for item in batch}
+        summary_by_id: dict[str, dict] = {}
+        for s in raw:
+            vid = s.get("video_id")
+            if vid and vid in expected_ids:
+                summary_by_id[vid] = s
+            elif vid:
+                log.warning(f"  LLM returned unexpected video_id={vid!r} in batch {batch_idx}")
 
-        n = len(summary.get("gossip_items", []))
-        log.info(f"    -> {n} gossip items saved")
-        processed += 1
+        # Verify evidence and save
+        to_verify = [summary_by_id[item[_VI_ID]] for item in batch
+                     if item[_VI_ID] in summary_by_id]
+        verified_list = _verify_evidence(conn, to_verify)
+        verified_by_id = {s["video_id"]: s for s in verified_list}
+
+        for item in batch:
+            video_id = item[_VI_ID]
+            summary  = verified_by_id.get(video_id)
+            if not summary:
+                log.warning(f"  No LLM result for {video_id} ({item[_VI_TITLE][:50]})")
+                continue
+
+            # Resolve entity aliases
+            if "entities_mentioned" in summary:
+                summary["entities_mentioned"] = resolver.resolve_list(
+                    summary["entities_mentioned"]
+                )
+            for gi in summary.get("gossip_items", []):
+                if "subjects" in gi:
+                    gi["subjects"] = resolver.resolve_list(gi["subjects"])
+
+            _save_result(conn, summary, llm.backend, item[_VI_MAXDT], len(item[_VI_COMMS]))
+            n = len(summary.get("gossip_items", []))
+            log.info(f"    [{video_id}] {item[_VI_TITLE][:60]}: {n} gossip items")
+            processed += 1
 
     return processed

@@ -15,6 +15,7 @@ SETTINGS_KEYS = {
     "llm_summarize_anthropic_model": "claude-haiku-4-5",
     "llm_summarize_ollama_model": "mistral-nemo:12b",
     "llm_summarize_max_tokens": "4096",
+    "llm_summarize_buffer_chars": "120000",
     "llm_analyze_backend": "anthropic",
     "llm_analyze_anthropic_model": "claude-sonnet-4-6",
     "llm_analyze_ollama_model": "mistral-nemo:12b",

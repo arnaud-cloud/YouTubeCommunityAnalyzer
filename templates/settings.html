@@ -18,7 +18,7 @@
     </div>
 
     <div class="settings-section">
-        <h2>LLM — Summarize Step (per-video gossip extraction)</h2>
+        <h2>LLM — Summarize Step (batch gossip extraction)</h2>
         <div class="form-row">
             <div class="form-group">
                 <label for="llm_summarize_backend">Backend</label>
@@ -28,8 +28,13 @@
                 </select>
             </div>
             <div class="form-group">
-                <label for="llm_summarize_max_tokens">Max Tokens</label>
+                <label for="llm_summarize_max_tokens">Max Tokens (per batch call)</label>
                 <input type="number" id="llm_summarize_max_tokens" name="llm_summarize_max_tokens" value="{{ settings.llm_summarize_max_tokens }}">
+            </div>
+            <div class="form-group">
+                <label for="llm_summarize_buffer_chars">Input Buffer (chars)</label>
+                <input type="number" id="llm_summarize_buffer_chars" name="llm_summarize_buffer_chars" value="{{ settings.llm_summarize_buffer_chars }}">
+                <small>Max chars of comments per LLM call. Lower for local GPU, higher for cloud. Default: 120000.</small>
             </div>
         </div>
         <div class="form-row">

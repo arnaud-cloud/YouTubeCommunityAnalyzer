@@ -18,8 +18,27 @@ def get_db(db_path: str | Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         conn.executescript(f.read())
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply incremental schema migrations for columns added after initial release."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(video_summaries)")}
+    if "last_comment_published_at" not in existing:
+        conn.execute(
+            "ALTER TABLE video_summaries ADD COLUMN last_comment_published_at TEXT"
+        )
+        # Backfill from the comments table so existing rows don't get re-processed
+        conn.execute("""
+            UPDATE video_summaries
+            SET last_comment_published_at = (
+                SELECT MAX(published_at) FROM comments
+                WHERE comments.video_id = video_summaries.video_id
+            )
+            WHERE last_comment_published_at IS NULL
+        """)
 
 
 def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
