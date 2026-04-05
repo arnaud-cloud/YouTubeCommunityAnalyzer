@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Home — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Your Communities</h1>
+    <a href="{{ url_for('community.new') }}" class="btn btn-primary">+ New Community</a>
+</div>
+
+{% if not communities %}
+<div class="empty-state">
+    <p>No communities yet. Create one to start tracking YouTube channels.</p>
+</div>
+{% endif %}
+
+<div class="card-grid">
+    {% for c in communities %}
+    <div class="card">
+        <div class="card-header">
+            <h3>{{ c.name }}</h3>
+            {% if c.description %}
+            <p class="card-desc">{{ c.description }}</p>
+            {% endif %}
+        </div>
+        <div class="card-stats">
+            <div class="stat">
+                <span class="stat-value">{{ c.channel_count }}</span>
+                <span class="stat-label">Channels</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ "{:,}".format(c.total_subs) }}</span>
+                <span class="stat-label">Total Subs</span>
+            </div>
+        </div>
+        <div class="card-meta">
+            {% if c.last_snapshot %}
+            <span>Last tracked: {{ c.last_snapshot }}</span>
+            {% endif %}
+            {% if c.last_gossip_status %}
+            <span>Gossip: {{ c.last_gossip_status }}
+                {% if c.last_gossip_date %}({{ c.last_gossip_date[:10] }}){% endif %}
+            </span>
+            {% endif %}
+        </div>
+        <div class="card-actions">
+            <a href="{{ url_for('tracker.dashboard', community_id=c.id) }}" class="btn btn-sm">Dashboard</a>
+            <a href="{{ url_for('gossip.runs', community_id=c.id) }}" class="btn btn-sm">Gossip</a>
+            <a href="{{ url_for('community.edit', community_id=c.id) }}" class="btn btn-sm btn-outline">Edit</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

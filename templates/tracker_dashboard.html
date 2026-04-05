@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% block title %}{{ community.name }} Dashboard — Community Analyzer{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block sidebar %}
+<div class="sidebar-section">
+    <h3>{{ community.name }}</h3>
+    <ul class="channel-list">
+        {% for ch in channels %}
+        <li>
+            <a href="#" class="channel-link" data-channel="{{ ch.channel_id }}">
+                {{ ch.channel_name }}
+            </a>
+        </li>
+        {% endfor %}
+        <li><a href="#" class="channel-link active" data-channel="all">All Channels</a></li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ community.name }} — Tracker Dashboard</h1>
+    <div>
+        <form method="POST" action="{{ url_for('tracker.collect_now', community_id=community.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-primary">Run Collection Now</button>
+        </form>
+        <a href="{{ url_for('community.edit', community_id=community.id) }}" class="btn btn-outline">Edit Community</a>
+    </div>
+</div>
+
+<div class="stat-tiles" id="stat-tiles">
+    <div class="stat-tile"><span class="stat-value" id="tile-channels">-</span><span class="stat-label">Channels</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-subs">-</span><span class="stat-label">Total Subscribers</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-views">-</span><span class="stat-label">Total Views</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-videos">-</span><span class="stat-label">Total Videos</span></div>
+</div>
+
+<div class="chart-container">
+    <h2>Subscriber Growth Over Time</h2>
+    <canvas id="subGrowthChart" height="300"></canvas>
+</div>
+
+<div class="chart-container">
+    <h2>Total Views Over Time</h2>
+    <canvas id="viewGrowthChart" height="300"></canvas>
+</div>
+
+<div class="chart-row">
+    <div class="chart-container half">
+        <h2>Subscriber Ranking</h2>
+        <canvas id="subRankChart" height="400"></canvas>
+    </div>
+    <div class="chart-container half">
+        <h2>Views Ranking</h2>
+        <canvas id="viewRankChart" height="400"></canvas>
+    </div>
+</div>
+
+<div class="chart-container">
+    <h2>Top Videos by Views</h2>
+    <canvas id="topVideosChart" height="400"></canvas>
+</div>
+
+<div class="chart-row">
+    <div class="chart-container half">
+        <h2>Duration Distribution</h2>
+        <canvas id="durationChart" height="300"></canvas>
+    </div>
+    <div class="chart-container half">
+        <h2>Engagement (Like/View %)</h2>
+        <canvas id="engagementChart" height="300"></canvas>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COMMUNITY_ID = {{ community.id }};
+const CHART_COLORS = [
+    '#7c4dff','#2ecc71','#e74c3c','#f39c12','#3498db',
+    '#e91e63','#00bcd4','#ff5722','#9c27b0','#4caf50',
+    '#ff9800','#607d8b','#795548','#009688','#673ab7',
+    '#8bc34a','#ff5252','#536dfe','#ffab40','#69f0ae',
+];
+
+const chartDefaults = {
+    color: '#e8e8f0',
+    borderColor: '#2a2a4a',
+    backgroundColor: '#1a1a2e',
+};
+Chart.defaults.color = '#e8e8f0';
+Chart.defaults.plugins.legend.labels.color = '#c0c0d0';
+
+let allData = null;
+let charts = {};
+
+async function loadData() {
+    const resp = await fetch(`/tracker/${COMMUNITY_ID}/data`);
+    allData = await resp.json();
+    renderDashboard('all');
+}
+
+function renderDashboard(channelFilter) {
+    if (!allData) return;
+    const d = allData;
+
+    // Filter data
+    const channels = channelFilter === 'all' ? d.channels : d.channels.filter(c => c.channel_id === channelFilter);
+    const cids = new Set(channels.map(c => c.channel_id));
+    const snapshots = d.snapshots.filter(s => cids.has(s.channel_id));
+    const videos = d.videos.filter(v => cids.has(v.channel_id));
+
+    // Stat tiles
+    document.getElementById('tile-channels').textContent = channels.length;
+
+    // Get latest snapshot per channel for aggregate stats
+    const latestSnaps = {};
+    for (const s of snapshots) {
+        if (!latestSnaps[s.channel_id] || s.snapshot_date > latestSnaps[s.channel_id].snapshot_date) {
+            latestSnaps[s.channel_id] = s;
+        }
+    }
+    const ls = Object.values(latestSnaps);
+    document.getElementById('tile-subs').textContent = ls.reduce((a, s) => a + (s.subscriber_count || 0), 0).toLocaleString();
+    document.getElementById('tile-views').textContent = ls.reduce((a, s) => a + (s.view_count || 0), 0).toLocaleString();
+    document.getElementById('tile-videos').textContent = ls.reduce((a, s) => a + (s.video_count || 0), 0).toLocaleString();
+
+    // Channel name lookup
+    const cname = {};
+    for (const c of d.channels) cname[c.channel_id] = c.channel_name;
+
+    // Subscriber growth chart
+    renderTimeSeriesChart('subGrowthChart', snapshots, 'subscriber_count', 'Subscribers', cname);
+    renderTimeSeriesChart('viewGrowthChart', snapshots, 'view_count', 'Views', cname);
+
+    // Subscriber ranking (horizontal bar)
+    const ranked = ls.sort((a, b) => (b.subscriber_count || 0) - (a.subscriber_count || 0));
+    renderHBarChart('subRankChart', ranked.map(s => cname[s.channel_id] || s.channel_id),
+        ranked.map(s => s.subscriber_count || 0), 'Subscribers');
+
+    // Views ranking
+    const vranked = [...ls].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+    renderHBarChart('viewRankChart', vranked.map(s => cname[s.channel_id] || s.channel_id),
+        vranked.map(s => s.view_count || 0), 'Total Views');
+
+    // Top videos
+    const topVids = [...videos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 20);
+    renderHBarChart('topVideosChart',
+        topVids.map(v => (v.title || '').substring(0, 40)),
+        topVids.map(v => v.view_count || 0), 'Views');
+
+    // Duration distribution
+    const durBuckets = {'< 1min': 0, '1-5min': 0, '5-20min': 0, '20-60min': 0, '> 60min': 0};
+    for (const v of videos) {
+        const secs = parseDuration(v.duration);
+        if (secs < 60) durBuckets['< 1min']++;
+        else if (secs < 300) durBuckets['1-5min']++;
+        else if (secs < 1200) durBuckets['5-20min']++;
+        else if (secs < 3600) durBuckets['20-60min']++;
+        else durBuckets['> 60min']++;
+    }
+    renderDoughnutChart('durationChart', Object.keys(durBuckets), Object.values(durBuckets));
+
+    // Engagement (like/view ratio)
+    const engVids = videos.filter(v => v.view_count > 100).sort((a, b) =>
+        ((b.like_count || 0) / (b.view_count || 1)) - ((a.like_count || 0) / (a.view_count || 1))
+    ).slice(0, 15);
+    renderHBarChart('engagementChart',
+        engVids.map(v => (v.title || '').substring(0, 35)),
+        engVids.map(v => ((v.like_count || 0) / (v.view_count || 1) * 100).toFixed(2)),
+        'Like/View %');
+}
+
+function renderTimeSeriesChart(canvasId, snapshots, field, label, cname) {
+    if (charts[canvasId]) charts[canvasId].destroy();
+    // Group by channel
+    const byChannel = {};
+    for (const s of snapshots) {
+        if (!byChannel[s.channel_id]) byChannel[s.channel_id] = [];
+        byChannel[s.channel_id].push(s);
+    }
+    const datasets = [];
+    let i = 0;
+    for (const [cid, snaps] of Object.entries(byChannel)) {
+        snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+        datasets.push({
+            label: cname[cid] || cid,
+            data: snaps.map(s => ({x: s.snapshot_date, y: s[field] || 0})),
+            borderColor: CHART_COLORS[i % CHART_COLORS.length],
+            backgroundColor: 'transparent',
+            tension: 0.3,
+            pointRadius: 1,
+        });
+        i++;
+    }
+    const ctx = document.getElementById(canvasId);
+    charts[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: {datasets},
+        options: {
+            responsive: true,
+            scales: {
+                x: {type: 'category', grid: {color: '#2a2a4a'}},
+                y: {grid: {color: '#2a2a4a'}},
+            },
+            plugins: {legend: {position: 'bottom', labels: {boxWidth: 12, font: {size: 10}}}},
+        },
+    });
+}
+
+function renderHBarChart(canvasId, labels, data, label) {
+    if (charts[canvasId]) charts[canvasId].destroy();
+    const ctx = document.getElementById(canvasId);
+    charts[canvasId] = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label,
+                data,
+                backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+            }],
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            scales: {
+                x: {grid: {color: '#2a2a4a'}},
+                y: {grid: {display: false}, ticks: {font: {size: 10}}},
+            },
+            plugins: {legend: {display: false}},
+        },
+    });
+}
+
+function renderDoughnutChart(canvasId, labels, data) {
+    if (charts[canvasId]) charts[canvasId].destroy();
+    const ctx = document.getElementById(canvasId);
+    charts[canvasId] = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: CHART_COLORS.slice(0, labels.length),
+            }],
+        },
+        options: {responsive: true, plugins: {legend: {position: 'bottom'}}},
+    });
+}
+
+function parseDuration(iso) {
+    if (!iso) return 0;
+    const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return 0;
+    return (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+}
+
+// Channel filter links
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('.channel-link');
+    if (!link) return;
+    e.preventDefault();
+    document.querySelectorAll('.channel-link').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    renderDashboard(link.dataset.channel);
+});
+
+loadData();
+</script>
+{% endblock %}

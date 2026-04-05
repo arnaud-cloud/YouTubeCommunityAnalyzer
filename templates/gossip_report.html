@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Gossip Report #{{ analysis_id }} — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Gossip Report #{{ analysis_id }}</h1>
+    <div>
+        {% if community_id %}
+        <a href="{{ url_for('gossip.runs', community_id=community_id) }}" class="btn btn-outline">Back to Runs</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="report-embed">
+    {{ report_html }}
+</div>
+{% endblock %}

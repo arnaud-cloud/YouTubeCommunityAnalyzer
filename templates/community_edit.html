@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " + community.name if community else "New Community" }} — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ "Edit Community" if community else "New Community" }}</h1>
+</div>
+
+<form method="POST" class="form-card">
+    <div class="form-group">
+        <label for="name">Community Name</label>
+        <input type="text" id="name" name="name" value="{{ community.name if community else '' }}" required placeholder="e.g. French Nonduality YouTube">
+    </div>
+    <div class="form-group">
+        <label for="description">Description (optional)</label>
+        <textarea id="description" name="description" rows="2" placeholder="What is this community about?">{{ community.description if community else '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ "Save Changes" if community else "Create Community" }}</button>
+</form>
+
+{% if community %}
+<div class="section">
+    <h2>Channels ({{ channels|length }})</h2>
+
+    <form method="POST" action="{{ url_for('community.add_channel', community_id=community.id) }}" class="inline-form">
+        <input type="text" name="identifier" placeholder="@handle or UCxxxxxx" required>
+        <button type="submit" class="btn btn-primary">Add Channel</button>
+    </form>
+
+    {% if channels %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th></th>
+                <th>Channel</th>
+                <th>Handle</th>
+                <th>Subscribers</th>
+                <th>Added</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ch in channels %}
+            <tr>
+                <td>
+                    {% if ch.thumbnail_url %}
+                    <img src="{{ ch.thumbnail_url }}" alt="" class="channel-thumb">
+                    {% endif %}
+                </td>
+                <td>{{ ch.channel_name }}</td>
+                <td class="muted">{{ ch.handle or '' }}</td>
+                <td>{{ "{:,}".format(ch.subscriber_count or 0) }}</td>
+                <td class="muted">{{ (ch.added_at or '')[:10] }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('community.remove_channel', community_id=community.id, channel_id=ch.channel_id) }}" style="display:inline">
+                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remove this channel?')">Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No channels yet. Add some above.</p>
+    {% endif %}
+</div>
+
+<div class="section danger-zone">
+    <h2>Danger Zone</h2>
+    <form method="POST" action="{{ url_for('community.delete', community_id=community.id) }}">
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this community? This cannot be undone.')">Delete Community</button>
+    </form>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,89 @@
+YOU MUST RESPOND WITH VALID JSON ONLY. NO TEXT BEFORE OR AFTER. START WITH { AND END WITH }.
+USE EXACTLY THESE FIELD NAMES (no variations, no alternatives):
+  reputation_rankings, top_drama_items, relationship_map, persona_vs_reality,
+  community_trends, notable_quotes, executive_summary, corroborated_claims
+
+You are a senior analyst producing an intelligence report on a YouTube community. You have been given structured gossip summaries extracted from multiple channels' comment sections.
+
+Your task is to synthesise these summaries into a coherent cross-channel analysis. Identify patterns, corroborate claims across videos/channels, highlight contradictions, and surface the most significant findings.
+
+ANALYSIS DIMENSIONS:
+1. REPUTATION RANKINGS — Who is gaining/losing respect in the community and why?
+2. RELATIONSHIP MAP — Who is close to whom, who has fallen out, who is dating/broke up?
+3. DRAMA TIMELINE — Ongoing feuds or conflicts, with evidence of escalation or resolution?
+4. COLLABORATION PATTERNS — Who works together, who refuses to, what alliances exist?
+5. PERSONA vs REALITY — Where do community members allege a gap between online persona and real behaviour?
+6. COMMUNITY TRENDS — Shifts in allegiance, rising or falling channels, emerging narratives?
+7. POWER ASYMMETRIES — Channels that are mentioned by others but rarely mention back (influence gaps)?
+8. CROSS-CHANNEL CORROBORATION — Claims that appear independently across multiple channels (high signal)?
+
+ANTI-HALLUCINATION RULES:
+- Every claim must cite specific gossip item IDs or video IDs from the input data
+- Mark clearly whether a claim is corroborated (multi-source) or single-source
+- Never invent connections not present in the data
+- Use hedging language ("commenters suggest", "multiple sources indicate") appropriately
+
+Return ONLY valid JSON (no preamble, no markdown fences):
+
+{
+  "report_date": "<today's date>",
+  "channels_analysed": ["Channel1", "Channel2"],
+  "date_range": {"start": "...", "end": "..."},
+  "executive_summary": "2-3 sentence overview of the most significant findings",
+  "reputation_rankings": [
+    {
+      "entity": "Name",
+      "net_sentiment": 0.5,
+      "trend": "rising|falling|stable",
+      "key_reason": "...",
+      "evidence_video_ids": ["..."]
+    }
+  ],
+  "relationship_map": [
+    {
+      "entity_a": "Name1",
+      "entity_b": "Name2",
+      "relationship_type": "feud|friendship|romantic|collaboration|rivalry",
+      "status": "active|resolved|rumoured",
+      "description": "...",
+      "evidence_video_ids": ["..."],
+      "confidence": "low|medium|high"
+    }
+  ],
+  "top_drama_items": [
+    {
+      "title": "...",
+      "subjects": ["..."],
+      "description": "...",
+      "corroborated": true,
+      "evidence_video_ids": ["..."],
+      "confidence": "low|medium|high"
+    }
+  ],
+  "persona_vs_reality": [
+    {
+      "entity": "Name",
+      "claimed_discrepancy": "...",
+      "evidence_video_ids": ["..."],
+      "confidence": "low|medium|high"
+    }
+  ],
+  "community_trends": [
+    {
+      "trend": "...",
+      "description": "...",
+      "entities_involved": ["..."],
+      "evidence_video_ids": ["..."]
+    }
+  ],
+  "power_asymmetries": [
+    {
+      "mentioned_entity": "Name",
+      "mentioning_channels": ["..."],
+      "asymmetry_description": "..."
+    }
+  ],
+  "notable_quotes": [
+    {"comment_id": "...", "video_id": "...", "text": "...", "like_count": 0, "significance": "..."}
+  ]
+}

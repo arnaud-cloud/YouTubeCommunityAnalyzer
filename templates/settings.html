@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Settings — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<form method="POST" class="settings-form">
+
+    <div class="settings-section">
+        <h2>YouTube API</h2>
+        <div class="form-group">
+            <label for="youtube_api_key">YouTube API Key</label>
+            <input type="password" id="youtube_api_key" name="youtube_api_key" value="{{ settings.youtube_api_key }}" placeholder="AIza...">
+            <small>Get one at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></small>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>LLM — Summarize Step (per-video gossip extraction)</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="llm_summarize_backend">Backend</label>
+                <select id="llm_summarize_backend" name="llm_summarize_backend">
+                    <option value="ollama" {% if settings.llm_summarize_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
+                    <option value="anthropic" {% if settings.llm_summarize_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="llm_summarize_max_tokens">Max Tokens</label>
+                <input type="number" id="llm_summarize_max_tokens" name="llm_summarize_max_tokens" value="{{ settings.llm_summarize_max_tokens }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="llm_summarize_anthropic_model">Anthropic Model</label>
+                <input type="text" id="llm_summarize_anthropic_model" name="llm_summarize_anthropic_model" value="{{ settings.llm_summarize_anthropic_model }}">
+            </div>
+            <div class="form-group">
+                <label for="llm_summarize_ollama_model">Ollama Model</label>
+                <input type="text" id="llm_summarize_ollama_model" name="llm_summarize_ollama_model" value="{{ settings.llm_summarize_ollama_model }}">
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>LLM — Analyze Step (cross-channel narrative synthesis)</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="llm_analyze_backend">Backend</label>
+                <select id="llm_analyze_backend" name="llm_analyze_backend">
+                    <option value="ollama" {% if settings.llm_analyze_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
+                    <option value="anthropic" {% if settings.llm_analyze_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="llm_analyze_max_tokens">Max Tokens</label>
+                <input type="number" id="llm_analyze_max_tokens" name="llm_analyze_max_tokens" value="{{ settings.llm_analyze_max_tokens }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="llm_analyze_anthropic_model">Anthropic Model</label>
+                <input type="text" id="llm_analyze_anthropic_model" name="llm_analyze_anthropic_model" value="{{ settings.llm_analyze_anthropic_model }}">
+            </div>
+            <div class="form-group">
+                <label for="llm_analyze_ollama_model">Ollama Model</label>
+                <input type="text" id="llm_analyze_ollama_model" name="llm_analyze_ollama_model" value="{{ settings.llm_analyze_ollama_model }}">
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>LLM — Common</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="anthropic_api_key">Anthropic API Key</label>
+                <input type="password" id="anthropic_api_key" name="anthropic_api_key" value="{{ settings.anthropic_api_key }}" placeholder="sk-ant-...">
+            </div>
+            <div class="form-group">
+                <label for="ollama_base_url">Ollama Base URL</label>
+                <input type="text" id="ollama_base_url" name="ollama_base_url" value="{{ settings.ollama_base_url }}">
+            </div>
+            <div class="form-group">
+                <label for="llm_temperature">Temperature</label>
+                <input type="number" id="llm_temperature" name="llm_temperature" value="{{ settings.llm_temperature }}" step="0.1" min="0" max="2">
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>Gossip Collection</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max_comments_per_video">Max Comments per Video</label>
+                <input type="number" id="max_comments_per_video" name="max_comments_per_video" value="{{ settings.max_comments_per_video }}">
+            </div>
+            <div class="form-group">
+                <label for="max_videos_per_channel">Max Videos per Channel</label>
+                <input type="text" id="max_videos_per_channel" name="max_videos_per_channel" value="{{ settings.max_videos_per_channel }}" placeholder="Leave empty for all">
+            </div>
+            <div class="form-group">
+                <label for="fetch_replies">Fetch Replies</label>
+                <select id="fetch_replies" name="fetch_replies">
+                    <option value="true" {% if settings.fetch_replies == 'true' %}selected{% endif %}>Yes</option>
+                    <option value="false" {% if settings.fetch_replies == 'false' %}selected{% endif %}>No</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="date_filter_after">Only Videos After</label>
+                <input type="date" id="date_filter_after" name="date_filter_after" value="{{ settings.date_filter_after }}">
+            </div>
+            <div class="form-group">
+                <label for="gossip_confidence_threshold">Confidence Threshold</label>
+                <select id="gossip_confidence_threshold" name="gossip_confidence_threshold">
+                    <option value="low" {% if settings.gossip_confidence_threshold == 'low' %}selected{% endif %}>Low (include all)</option>
+                    <option value="medium" {% if settings.gossip_confidence_threshold == 'medium' %}selected{% endif %}>Medium</option>
+                    <option value="high" {% if settings.gossip_confidence_threshold == 'high' %}selected{% endif %}>High (strict)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="report_top_n_entities">Top N Entities in Charts</label>
+                <input type="number" id="report_top_n_entities" name="report_top_n_entities" value="{{ settings.report_top_n_entities }}">
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <h2>Entity Aliases</h2>
+        <div class="form-group">
+            <label for="entity_aliases">Alias Map (JSON)</label>
+            <textarea id="entity_aliases" name="entity_aliases" rows="5" class="mono" placeholder='{"Canonical Name": ["alias1", "alias2"]}'>{{ settings.entity_aliases }}</textarea>
+            <small>Maps variant names to canonical entity names for deduplication.</small>
+        </div>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-lg">Save All Settings</button>
+</form>
+{% endblock %}
