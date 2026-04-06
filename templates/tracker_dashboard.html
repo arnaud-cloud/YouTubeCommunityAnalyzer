@@ -33,23 +33,76 @@
 </div>
 
 <div class="stat-tiles" id="stat-tiles">
-    <div class="stat-tile"><span class="stat-value" id="tile-channels">-</span><span class="stat-label">Channels</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-first">-</span><span class="stat-label" id="tile-first-label">Channels</span></div>
     <div class="stat-tile"><span class="stat-value" id="tile-subs">-</span><span class="stat-label">Total Subscribers</span></div>
     <div class="stat-tile"><span class="stat-value" id="tile-views">-</span><span class="stat-label">Total Views</span></div>
     <div class="stat-tile"><span class="stat-value" id="tile-videos">-</span><span class="stat-label">Total Videos</span></div>
 </div>
 
-<div class="chart-container">
-    <h2>Subscriber Growth Over Time</h2>
-    <canvas id="subGrowthChart" height="300"></canvas>
-</div>
-
-<div class="chart-container">
-    <h2>Total Views Over Time</h2>
-    <canvas id="viewGrowthChart" height="300"></canvas>
+<div class="channel-selector-panel">
+    <div class="channel-selector-actions">
+        <button id="growthSelAll" class="btn-sel">All</button>
+        <button id="growthSelNone" class="btn-sel">None</button>
+    </div>
+    <div id="growthChannelCheckboxes" class="channel-checkboxes"></div>
 </div>
 
 <div class="chart-row">
+    <div class="chart-container half">
+        <h2>Subscribers Over Time</h2>
+        <canvas id="subGrowthChart" height="200"></canvas>
+    </div>
+    <div class="chart-container half">
+        <h2>Total Views Over Time</h2>
+        <canvas id="viewGrowthChart" height="200"></canvas>
+    </div>
+</div>
+<div class="chart-row">
+    <div class="chart-container half">
+        <h2>Video Count Over Time</h2>
+        <canvas id="videoCountChart" height="200"></canvas>
+    </div>
+    <div class="chart-container half">
+        <h2>Avg Views per Video Over Time</h2>
+        <canvas id="viewsPerVideoChart" height="200"></canvas>
+    </div>
+</div>
+
+<div id="growthLeadersSection">
+    <div class="chart-header" style="margin-bottom:1rem">
+        <h2 style="font-size:1.1rem;color:var(--text)">Growth Leaders</h2>
+        <select id="growthLeadersTopN" class="chart-select">
+            <option value="5">Top 5</option>
+            <option value="10" selected>Top 10</option>
+        </select>
+    </div>
+    <div class="chart-row">
+        <div class="chart-container half">
+            <h2>Total Views Growth (%)</h2>
+            <canvas id="glViewsChart" height="220"></canvas>
+        </div>
+        <div class="chart-container half">
+            <h2>Avg Views / Video Growth (%)</h2>
+            <canvas id="glAvgViewsChart" height="220"></canvas>
+        </div>
+    </div>
+    <div class="chart-row">
+        <div class="chart-container half">
+            <h2>Subscriber Growth (%)</h2>
+            <canvas id="glSubsChart" height="220"></canvas>
+        </div>
+        <div class="chart-container half">
+            <h2>Engagement Rate Change (pp)</h2>
+            <canvas id="glEngChart" height="220"></canvas>
+        </div>
+    </div>
+</div>
+
+<div id="rankingLabel" class="chart-header" style="margin-bottom:1rem;margin-top:0.5rem">
+    <h2 style="font-size:1.1rem;color:var(--text)">Ranking</h2>
+</div>
+
+<div class="chart-row" id="rankingRow">
     <div class="chart-container half">
         <h2>Subscriber Ranking</h2>
         <canvas id="subRankChart" height="400"></canvas>
@@ -62,7 +115,7 @@
 
 <div class="chart-container">
     <h2>Top Videos by Views</h2>
-    <canvas id="topVideosChart" height="400"></canvas>
+    <canvas id="topVideosChart" height="200"></canvas>
 </div>
 
 <div class="chart-row">
@@ -97,15 +150,74 @@ Chart.defaults.plugins.legend.labels.color = '#c0c0d0';
 
 let allData = null;
 let charts = {};
+let channelColorMap = {};  // channel_id -> color string
+let currentChannelFilter = 'all';
 
 async function loadData() {
     const resp = await fetch(`/tracker/${COMMUNITY_ID}/data`);
     allData = await resp.json();
+    // Assign stable colors by descending subscriber count
+    const sorted = [...allData.channels].sort((a, b) => {
+        const snapA = allData.snapshots.filter(s => s.channel_id === a.channel_id);
+        const snapB = allData.snapshots.filter(s => s.channel_id === b.channel_id);
+        const latestA = snapA.length ? Math.max(...snapA.map(s => s.subscriber_count || 0)) : 0;
+        const latestB = snapB.length ? Math.max(...snapB.map(s => s.subscriber_count || 0)) : 0;
+        return latestB - latestA;
+    });
+    sorted.forEach((c, i) => { channelColorMap[c.channel_id] = CHART_COLORS[i % CHART_COLORS.length]; });
+    buildGrowthSelector(sorted);
     renderDashboard('all');
+}
+
+function buildGrowthSelector(channels) {
+    const container = document.getElementById('growthChannelCheckboxes');
+    container.innerHTML = '';
+    channels.forEach(c => {
+        const color = channelColorMap[c.channel_id] || '#aaa';
+        const label = document.createElement('label');
+        label.className = 'channel-checkbox-label';
+        label.innerHTML = `
+            <input type="checkbox" class="growth-ch-cb" value="${c.channel_id}" checked>
+            <span class="ch-color-dot" style="background:${color}"></span>
+            ${c.channel_name}`;
+        container.appendChild(label);
+    });
+    container.querySelectorAll('.growth-ch-cb').forEach(cb =>
+        cb.addEventListener('change', refreshGrowthCharts));
+    document.getElementById('growthSelAll').addEventListener('click', () => {
+        container.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = true);
+        refreshGrowthCharts();
+    });
+    document.getElementById('growthSelNone').addEventListener('click', () => {
+        container.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = false);
+        refreshGrowthCharts();
+    });
+}
+
+function getSelectedGrowthChannelIds() {
+    return [...document.querySelectorAll('.growth-ch-cb:checked')].map(cb => cb.value);
+}
+
+function refreshGrowthCharts() {
+    if (!allData) return;
+    const cname = {};
+    for (const c of allData.channels) cname[c.channel_id] = c.channel_name;
+    let snapshots;
+    if (currentChannelFilter === 'all') {
+        const selected = new Set(getSelectedGrowthChannelIds());
+        snapshots = allData.snapshots.filter(s => selected.has(s.channel_id));
+    } else {
+        snapshots = allData.snapshots.filter(s => s.channel_id === currentChannelFilter);
+    }
+    renderTimeSeriesChart('subGrowthChart', snapshots, 'subscriber_count', 'Subscribers', cname);
+    renderTimeSeriesChart('viewGrowthChart', snapshots, 'view_count', 'Views', cname);
+    renderTimeSeriesChart('videoCountChart', snapshots, 'video_count', 'Videos', cname);
+    renderTimeSeriesChart('viewsPerVideoChart', snapshots, s => s.video_count ? s.view_count / s.video_count : 0, 'Views/Video', cname);
 }
 
 function renderDashboard(channelFilter) {
     if (!allData) return;
+    currentChannelFilter = channelFilter;
     const d = allData;
 
     // Filter data
@@ -115,7 +227,12 @@ function renderDashboard(channelFilter) {
     const videos = d.videos.filter(v => cids.has(v.channel_id));
 
     // Stat tiles
-    document.getElementById('tile-channels').textContent = channels.length;
+    const firstTileVal = document.getElementById('tile-first');
+    const firstTileLabel = document.getElementById('tile-first-label');
+    if (channelFilter === 'all') {
+        firstTileVal.textContent = channels.length;
+        firstTileLabel.textContent = 'Channels';
+    }
 
     // Get latest snapshot per channel for aggregate stats
     const latestSnaps = {};
@@ -127,31 +244,54 @@ function renderDashboard(channelFilter) {
     const ls = Object.values(latestSnaps);
     document.getElementById('tile-subs').textContent = ls.reduce((a, s) => a + (s.subscriber_count || 0), 0).toLocaleString();
     document.getElementById('tile-views').textContent = ls.reduce((a, s) => a + (s.view_count || 0), 0).toLocaleString();
-    document.getElementById('tile-videos').textContent = ls.reduce((a, s) => a + (s.video_count || 0), 0).toLocaleString();
+    const totalVideos = ls.reduce((a, s) => a + (s.video_count || 0), 0);
+    document.getElementById('tile-videos').textContent = totalVideos.toLocaleString();
+    if (channelFilter !== 'all') {
+        const totalViews = ls.reduce((a, s) => a + (s.view_count || 0), 0);
+        const avgViewsPerVideo = totalVideos ? Math.round(totalViews / totalVideos) : 0;
+        firstTileVal.textContent = avgViewsPerVideo.toLocaleString();
+        firstTileLabel.textContent = 'Avg Views / Video';
+    }
 
     // Channel name lookup
     const cname = {};
     for (const c of d.channels) cname[c.channel_id] = c.channel_name;
 
-    // Subscriber growth chart
-    renderTimeSeriesChart('subGrowthChart', snapshots, 'subscriber_count', 'Subscribers', cname);
-    renderTimeSeriesChart('viewGrowthChart', snapshots, 'view_count', 'Views', cname);
+    // Growth charts (delegated to refreshGrowthCharts so selector is respected)
+    refreshGrowthCharts();
 
-    // Subscriber ranking (horizontal bar)
-    const ranked = ls.sort((a, b) => (b.subscriber_count || 0) - (a.subscriber_count || 0));
-    renderHBarChart('subRankChart', ranked.map(s => cname[s.channel_id] || s.channel_id),
-        ranked.map(s => s.subscriber_count || 0), 'Subscribers');
+    // Channel selector + channels tile — only meaningful with all channels
+    const isAll = channelFilter === 'all';
+    document.querySelector('.channel-selector-panel').style.display = isAll ? '' : 'none';
 
-    // Views ranking
-    const vranked = [...ls].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-    renderHBarChart('viewRankChart', vranked.map(s => cname[s.channel_id] || s.channel_id),
-        vranked.map(s => s.view_count || 0), 'Total Views');
+    // Growth leaders + ranking panels — only meaningful with multiple channels
+    const rankingRow = document.getElementById('rankingRow');
+    const growthLeadersSection = document.getElementById('growthLeadersSection');
+    if (channelFilter === 'all') {
+        rankingRow.style.display = '';
+        document.getElementById('rankingLabel').style.display = '';
+        growthLeadersSection.style.display = '';
+        const ranked = ls.sort((a, b) => (b.subscriber_count || 0) - (a.subscriber_count || 0));
+        renderHBarChart('subRankChart', ranked.map(s => cname[s.channel_id] || s.channel_id),
+            ranked.map(s => s.subscriber_count || 0), 'Subscribers', 13,
+            ranked.map(s => s.channel_id));
+        const vranked = [...ls].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+        renderHBarChart('viewRankChart', vranked.map(s => cname[s.channel_id] || s.channel_id),
+            vranked.map(s => s.view_count || 0), 'Total Views', 13,
+            vranked.map(s => s.channel_id));
+        renderGrowthLeaders();
+    } else {
+        rankingRow.style.display = 'none';
+        document.getElementById('rankingLabel').style.display = 'none';
+        growthLeadersSection.style.display = 'none';
+    }
 
     // Top videos
     const topVids = [...videos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 20);
     renderHBarChart('topVideosChart',
-        topVids.map(v => (v.title || '').substring(0, 40)),
-        topVids.map(v => v.view_count || 0), 'Views');
+        topVids.map(v => `${(cname[v.channel_id] || v.channel_id)} — ${(v.title || '').substring(0, 35)}`),
+        topVids.map(v => v.view_count || 0), 'Views', 12,
+        topVids.map(v => v.channel_id));
 
     // Duration distribution
     const durBuckets = {'< 1min': 0, '1-5min': 0, '5-20min': 0, '20-60min': 0, '> 60min': 0};
@@ -170,51 +310,134 @@ function renderDashboard(channelFilter) {
         ((b.like_count || 0) / (b.view_count || 1)) - ((a.like_count || 0) / (a.view_count || 1))
     ).slice(0, 15);
     renderHBarChart('engagementChart',
-        engVids.map(v => (v.title || '').substring(0, 35)),
+        engVids.map(v => [cname[v.channel_id] || v.channel_id, (v.title || '').substring(0, 40)]),
         engVids.map(v => ((v.like_count || 0) / (v.view_count || 1) * 100).toFixed(2)),
-        'Like/View %');
+        'Like/View %', 13,
+        engVids.map(v => v.channel_id));
 }
 
 function renderTimeSeriesChart(canvasId, snapshots, field, label, cname) {
     if (charts[canvasId]) charts[canvasId].destroy();
+    const getValue = typeof field === 'function' ? field : s => s[field] || 0;
     // Group by channel
     const byChannel = {};
     for (const s of snapshots) {
         if (!byChannel[s.channel_id]) byChannel[s.channel_id] = [];
         byChannel[s.channel_id].push(s);
     }
-    const datasets = [];
-    let i = 0;
-    for (const [cid, snaps] of Object.entries(byChannel)) {
+    // Sort channels by latest value descending
+    let entries = Object.entries(byChannel).map(([cid, snaps]) => {
         snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
-        datasets.push({
+        const latest = getValue(snaps[snaps.length - 1]);
+        return {cid, snaps, latest};
+    });
+    entries.sort((a, b) => b.latest - a.latest);
+
+    const datasets = entries.map(({cid, snaps}) => {
+        const color = channelColorMap[cid] || '#aaaaaa';
+        return {
             label: cname[cid] || cid,
-            data: snaps.map(s => ({x: s.snapshot_date, y: s[field] || 0})),
-            borderColor: CHART_COLORS[i % CHART_COLORS.length],
-            backgroundColor: 'transparent',
-            tension: 0.3,
-            pointRadius: 1,
-        });
-        i++;
-    }
+            data: snaps.map(s => ({x: s.snapshot_date, y: getValue(s)})),
+            borderColor: color,
+            backgroundColor: color + '22',
+            tension: 0.4,
+            cubicInterpolationMode: 'monotone',
+            pointRadius: 4,
+            pointHoverRadius: 7,
+            pointBackgroundColor: color,
+        };
+    });
+
     const ctx = document.getElementById(canvasId);
     charts[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {datasets},
         options: {
             responsive: true,
+            interaction: {mode: 'index', intersect: false},
             scales: {
                 x: {type: 'category', grid: {color: '#2a2a4a'}},
                 y: {grid: {color: '#2a2a4a'}},
             },
-            plugins: {legend: {position: 'bottom', labels: {boxWidth: 12, font: {size: 10}}}},
+            plugins: {
+                legend: {position: 'bottom', labels: {boxWidth: 12, font: {size: 10}}},
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}`,
+                    },
+                },
+            },
         },
     });
 }
 
-function renderHBarChart(canvasId, labels, data, label) {
+function renderGrowthLeaders() {
+    if (!allData) return;
+    const topN = parseInt(document.getElementById('growthLeadersTopN').value);
+    const cname = {};
+    for (const c of allData.channels) cname[c.channel_id] = c.channel_name;
+
+    // Group snapshots by channel, sorted by date
+    const byChannel = {};
+    for (const s of allData.snapshots) {
+        if (!byChannel[s.channel_id]) byChannel[s.channel_id] = [];
+        byChannel[s.channel_id].push(s);
+    }
+    for (const snaps of Object.values(byChannel))
+        snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
+
+    // Aggregate video_snapshots by channel+date for engagement
+    const engMap = {};
+    for (const vs of allData.video_snapshots) {
+        const key = vs.channel_id + '|' + vs.snapshot_date;
+        if (!engMap[key]) engMap[key] = {likes: 0, views: 0};
+        engMap[key].likes += vs.like_count || 0;
+        engMap[key].views += vs.view_count || 0;
+    }
+
+    const stats = [];
+    for (const [cid, snaps] of Object.entries(byChannel)) {
+        if (snaps.length < 2) continue;
+        const first = snaps[0], last = snaps[snaps.length - 1];
+
+        const pct = (a, b) => a ? (b - a) / a * 100 : null;
+
+        const viewGrowth    = pct(first.view_count, last.view_count);
+        const subGrowth     = pct(first.subscriber_count, last.subscriber_count);
+        const avgFirst      = first.video_count ? first.view_count / first.video_count : 0;
+        const avgLast       = last.video_count  ? last.view_count  / last.video_count  : 0;
+        const avgViewsGrowth = pct(avgFirst, avgLast);
+
+        const eFirst = engMap[cid + '|' + first.snapshot_date];
+        const eLast  = engMap[cid + '|' + last.snapshot_date];
+        const engFirst = eFirst && eFirst.views ? eFirst.likes / eFirst.views * 100 : null;
+        const engLast  = eLast  && eLast.views  ? eLast.likes  / eLast.views  * 100 : null;
+        const engChange = engFirst !== null && engLast !== null ? engLast - engFirst : null;
+
+        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, engChange});
+    }
+
+    const renderLeader = (canvasId, key, label, unit) => {
+        const valid = stats.filter(s => s[key] !== null)
+            .sort((a, b) => b[key] - a[key]).slice(0, topN);
+        renderHBarChart(canvasId,
+            valid.map(s => cname[s.cid] || s.cid),
+            valid.map(s => parseFloat(s[key].toFixed(2))),
+            label, 13, valid.map(s => s.cid));
+    };
+
+    renderLeader('glViewsChart',   'viewGrowth',     'Views Growth %',      '%');
+    renderLeader('glAvgViewsChart','avgViewsGrowth', 'Avg Views/Video %',   '%');
+    renderLeader('glSubsChart',    'subGrowth',      'Subscriber Growth %', '%');
+    renderLeader('glEngChart',     'engChange',      'Engagement Δ pp',     'pp');
+}
+
+function renderHBarChart(canvasId, labels, data, label, labelFontSize = 10, colorKeys = null) {
     if (charts[canvasId]) charts[canvasId].destroy();
     const ctx = document.getElementById(canvasId);
+    const colorFn = colorKeys
+        ? (_, i) => channelColorMap[colorKeys[i]] || '#aaaaaa'
+        : (_, i) => CHART_COLORS[i % CHART_COLORS.length];
     charts[canvasId] = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -222,7 +445,7 @@ function renderHBarChart(canvasId, labels, data, label) {
             datasets: [{
                 label,
                 data,
-                backgroundColor: labels.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+                backgroundColor: labels.map(colorFn),
             }],
         },
         options: {
@@ -230,7 +453,7 @@ function renderHBarChart(canvasId, labels, data, label) {
             responsive: true,
             scales: {
                 x: {grid: {color: '#2a2a4a'}},
-                y: {grid: {display: false}, ticks: {font: {size: 10}}},
+                y: {grid: {display: false}, ticks: {font: {size: labelFontSize}}},
             },
             plugins: {legend: {display: false}},
         },
@@ -259,6 +482,10 @@ function parseDuration(iso) {
     if (!m) return 0;
     return (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
 }
+
+
+// Growth leaders top N dropdown
+document.getElementById('growthLeadersTopN').addEventListener('change', renderGrowthLeaders);
 
 // Channel filter links
 document.addEventListener('click', (e) => {
