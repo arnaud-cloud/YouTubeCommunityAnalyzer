@@ -55,8 +55,11 @@ def _make_progress(conn, run_id: int):
             current_channel[0] = parts[1] if len(parts) >= 2 else None
             detail = f"{parts[1]} — {parts[2]}" if len(parts) >= 3 else msg
         elif kind == "video":
-            ch = f"{current_channel[0]} · " if current_channel[0] else ""
-            detail = f"{ch}video {parts[1]}: {parts[2][:40]}" if len(parts) >= 3 else msg
+            # format: video\thandle\tpos\ttitle\t...
+            ch = parts[1] if len(parts) >= 2 else (current_channel[0] or "")
+            pos = parts[2] if len(parts) >= 3 else ""
+            title = parts[3][:40] if len(parts) >= 4 else ""
+            detail = f"{ch} · {pos}: {title}" if ch else f"{pos}: {title}"
         elif kind == "done":
             detail = f"✓ {parts[1]}: {parts[2]}" if len(parts) >= 3 else msg
         elif kind == "quota":

@@ -136,9 +136,10 @@ def collect_channel_comments(
         log.info(f"    {len(comments)} fetched, {new_count} new")
 
         if progress_callback:
+            ch_handle = handle or channel_name
             status = "new" if new_count > 0 else "skip"
             progress_callback(
-                f"video\t{i}/{len(videos)}\t{video['title'][:60]}"
+                f"video\t{ch_handle}\t{i}/{len(videos)}\t{video['title'][:60]}"
                 f"\t{len(comments)} fetched\t{new_count} new\t{status}"
             )
         time.sleep(0.3)

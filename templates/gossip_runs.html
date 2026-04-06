@@ -128,14 +128,14 @@ function renderLog(raw) {
             const info = parts[2] || '';
             return `<span style="color:#7dd3fc;font-weight:bold">▶ ${escHtml(name)}</span>  <span style="color:#94a3b8">${escHtml(info)}</span>`;
         } else if (kind === 'video') {
-            const pos   = parts[1] || '';
-            const title = parts[2] || '';
-            const fetched = parts[3] || '';
-            const newC  = parts[4] || '';
-            const status = parts[5] || '';
-            const newNum = parseInt((newC.match(/\d+/) || ['0'])[0]);
+            const handle  = parts[1] || '';
+            const pos     = parts[2] || '';
+            const title   = parts[3] || '';
+            const fetched = parts[4] || '';
+            const newC    = parts[5] || '';
+            const newNum  = parseInt((newC.match(/\d+/) || ['0'])[0]);
             const newColor = newNum > 0 ? '#4ade80' : '#64748b';
-            return `  <span style="color:#64748b">${escHtml(pos)}</span>  ${escHtml(title.substring(0,55))}  <span style="color:#94a3b8">${escHtml(fetched)}</span>  <span style="color:${newColor}">${escHtml(newC)}</span>`;
+            return `  <span style="color:#7dd3fc">${escHtml(handle)}</span>  <span style="color:#64748b">${escHtml(pos)}</span>  ${escHtml(title.substring(0,50))}  <span style="color:#94a3b8">${escHtml(fetched)}</span>  <span style="color:${newColor}">${escHtml(newC)}</span>`;
         } else if (kind === 'done') {
             const name = parts[1] || '';
             const info = parts[2] || '';
