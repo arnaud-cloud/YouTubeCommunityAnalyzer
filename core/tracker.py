@@ -206,6 +206,11 @@ def collect_community(conn, youtube, community_id: int,
                     backfill=backfill,
                 )
             time.sleep(0.3)
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                log.warning(f"Quota exceeded on channel {cid} — stopping tracker collection")
+                raise
+            log.error(f"Error collecting {cid}: {e}", exc_info=True)
         except Exception as e:
             log.error(f"Error collecting {cid}: {e}", exc_info=True)
 

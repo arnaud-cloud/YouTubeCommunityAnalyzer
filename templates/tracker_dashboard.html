@@ -55,6 +55,31 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
 {% endblock %}
 
 {% block content %}
+{% if collect_status == 'quota_exceeded' %}
+<div style="background:#7c2d12;border:1px solid #dc2626;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem">
+    <span style="font-size:1.2rem">⚡</span>
+    <div>
+        <strong style="color:#fca5a5">YouTube API quota exceeded</strong>
+        <span style="color:#fcd34d;margin-left:.5rem;font-size:.85rem">{{ collect_at }}</span>
+        <p style="margin:.25rem 0 0;color:#fecaca;font-size:.85rem">Collection stopped early — daily quota (10,000 units) was reached. Data for some channels may be missing. Collection will resume automatically tomorrow, or you can retry after midnight Pacific time when the quota resets.</p>
+    </div>
+</div>
+{% elif collect_status == 'error' %}
+<div style="background:#1e1b4b;border:1px solid #6366f1;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem">
+    <span style="font-size:1.2rem">⚠</span>
+    <div>
+        <strong style="color:#a5b4fc">Collection error</strong>
+        <span style="color:#94a3b8;margin-left:.5rem;font-size:.85rem">{{ collect_at }}</span>
+        <p style="margin:.25rem 0 0;color:#c7d2fe;font-size:.85rem">An error occurred during the last tracker collection. Check the application log for details.</p>
+    </div>
+</div>
+{% elif collect_status == 'running' %}
+<div style="background:#1e293b;border:1px solid #38bdf8;border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem">
+    <span style="font-size:1.2rem">⏳</span>
+    <strong style="color:#7dd3fc">Collection running in background…</strong>
+    <span style="color:#94a3b8;font-size:.85rem">Started {{ collect_at }}</span>
+</div>
+{% endif %}
 <div class="page-header">
     <h1>{{ community.name }} — Tracker Dashboard</h1>
     <div>

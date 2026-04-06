@@ -4,8 +4,12 @@ import json
 import threading
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
-from core.db import get_db, get_setting, get_community_channel_ids
-from core.youtube_api import build_youtube
+from datetime import datetime, timezone
+
+from googleapiclient.errors import HttpError
+
+from core.db import get_db, get_setting, set_setting, get_community_channel_ids
+from core.youtube_api import build_youtube, is_quota_exceeded
 from core.tracker import collect_community
 
 bp = Blueprint("tracker", __name__)
@@ -35,12 +39,16 @@ def dashboard(community_id):
         "SELECT id, name FROM communities ORDER BY name"
     ).fetchall()
 
+    collect_status = get_setting(conn, f"tracker_collect_status_{community_id}")
+    collect_at = get_setting(conn, f"tracker_collect_at_{community_id}")
     conn.close()
     return render_template(
         "tracker_dashboard.html",
         community=dict(community),
         channels=[dict(c) for c in channels],
         all_communities=[dict(c) for c in all_communities],
+        collect_status=collect_status,
+        collect_at=collect_at,
     )
 
 
@@ -120,6 +128,9 @@ def collect_now(community_id):
         return redirect(url_for("tracker.dashboard", community_id=community_id))
 
     db_path = current_app.config["DB_PATH"]
+    set_setting(conn, f"tracker_collect_status_{community_id}", "running")
+    set_setting(conn, f"tracker_collect_at_{community_id}",
+                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
     conn.close()
 
     def _run():
@@ -127,7 +138,17 @@ def collect_now(community_id):
         try:
             yt = build_youtube(get_setting(c, "youtube_api_key"))
             collect_community(c, yt, community_id)
+            set_setting(c, f"tracker_collect_status_{community_id}", "ok")
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                set_setting(c, f"tracker_collect_status_{community_id}", "quota_exceeded")
+            else:
+                set_setting(c, f"tracker_collect_status_{community_id}", f"error")
+        except Exception:
+            set_setting(c, f"tracker_collect_status_{community_id}", "error")
         finally:
+            set_setting(c, f"tracker_collect_at_{community_id}",
+                        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"))
             c.close()
 
     t = threading.Thread(target=_run, daemon=True)
