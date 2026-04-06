@@ -33,14 +33,14 @@ log = logging.getLogger("run_daily")
 
 from core.db import get_db, get_setting
 from core.youtube_api import build_youtube
-from core.tracker import collect_all_communities
+from core.tracker import collect_all_communities, collect_prioritized
 
 
 def main():
     parser = argparse.ArgumentParser(description="Daily tracker collection")
     parser.add_argument("--db", default=None, help="Path to database")
     parser.add_argument("--backfill", action="store_true",
-                        help="Full backfill (all videos, not just recent)")
+                        help="Full backfill for all channels (ignores prioritization)")
     args = parser.parse_args()
 
     conn = get_db(args.db)
@@ -50,11 +50,18 @@ def main():
         conn.close()
         return
 
-    log.info("Starting daily collection...")
     youtube = build_youtube(api_key)
-    collect_all_communities(conn, youtube, backfill=args.backfill)
+
+    if args.backfill:
+        log.info("Starting full backfill collection...")
+        collect_all_communities(conn, youtube, backfill=True)
+        log.info("Backfill complete.")
+    else:
+        log.info("Starting prioritized daily collection...")
+        collect_prioritized(conn, youtube)
+        log.info("Daily collection complete.")
+
     conn.close()
-    log.info("Daily collection complete.")
 
 
 if __name__ == "__main__":
