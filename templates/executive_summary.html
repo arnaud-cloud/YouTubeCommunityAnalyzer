@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Executive Summary — {{ community.name }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Executive Summary</h1>
+    <div>
+        <a href="{{ url_for('gossip.runs', community_id=community.id) }}" class="btn btn-outline">Back to Runs</a>
+    </div>
+</div>
+
+<div class="report-embed">
+    {{ summary_html }}
+</div>
+{% endblock %}

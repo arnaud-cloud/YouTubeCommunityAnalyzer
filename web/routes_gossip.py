@@ -8,6 +8,7 @@ from markupsafe import Markup
 from core.db import get_db, get_all_settings, get_community_channel_ids
 from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize
 from core.gossip_report import generate_report_html
+from core.executive_summary import generate_executive_summary
 
 bp = Blueprint("gossip", __name__)
 
@@ -341,4 +342,30 @@ def report(analysis_id):
         report_html=Markup(html),
         analysis_id=analysis_id,
         community_id=community_id,
+    )
+
+
+@bp.route("/<int:community_id>/executive-summary")
+def executive_summary(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    community = conn.execute(
+        "SELECT * FROM communities WHERE id = ?", (community_id,)
+    ).fetchone()
+    if not community:
+        conn.close()
+        flash("Community not found.", "error")
+        return redirect(url_for("main.home"))
+
+    try:
+        html = generate_executive_summary(conn, community_id)
+    except Exception as e:
+        conn.close()
+        flash(f"Executive summary failed: {e}", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    conn.close()
+    return render_template(
+        "executive_summary.html",
+        summary_html=Markup(html),
+        community=dict(community),
     )
