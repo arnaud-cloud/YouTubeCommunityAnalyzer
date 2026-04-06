@@ -122,6 +122,16 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
             <canvas id="glEngChart" height="220"></canvas>
         </div>
     </div>
+    <div class="chart-row">
+        <div class="chart-container half">
+            <h2>Views per Subscriber Growth (%)</h2>
+            <canvas id="glVpsChart" height="220"></canvas>
+        </div>
+        <div class="chart-container half">
+            <h2>Comment Rate Change (pp)</h2>
+            <canvas id="glCommentChart" height="220"></canvas>
+        </div>
+    </div>
 </div>
 
 <div id="rankingLabel" class="chart-header" style="margin-bottom:1rem;margin-top:0.5rem">
@@ -415,13 +425,14 @@ function renderGrowthLeaders() {
     for (const snaps of Object.values(byChannel))
         snaps.sort((a, b) => a.snapshot_date.localeCompare(b.snapshot_date));
 
-    // Aggregate video_snapshots by channel+date for engagement
-    const engMap = {};
+    // Aggregate video_snapshots by channel+date for engagement and comment rate
+    const vidMap = {};
     for (const vs of allData.video_snapshots) {
         const key = vs.channel_id + '|' + vs.snapshot_date;
-        if (!engMap[key]) engMap[key] = {likes: 0, views: 0};
-        engMap[key].likes += vs.like_count || 0;
-        engMap[key].views += vs.view_count || 0;
+        if (!vidMap[key]) vidMap[key] = {likes: 0, views: 0, comments: 0};
+        vidMap[key].likes    += vs.like_count    || 0;
+        vidMap[key].views    += vs.view_count    || 0;
+        vidMap[key].comments += vs.comment_count || 0;
     }
 
     const stats = [];
@@ -431,22 +442,30 @@ function renderGrowthLeaders() {
 
         const pct = (a, b) => a ? (b - a) / a * 100 : null;
 
-        const viewGrowth    = pct(first.view_count, last.view_count);
-        const subGrowth     = pct(first.subscriber_count, last.subscriber_count);
-        const avgFirst      = first.video_count ? first.view_count / first.video_count : 0;
-        const avgLast       = last.video_count  ? last.view_count  / last.video_count  : 0;
+        const viewGrowth     = pct(first.view_count, last.view_count);
+        const subGrowth      = pct(first.subscriber_count, last.subscriber_count);
+        const avgFirst       = first.video_count ? first.view_count / first.video_count : 0;
+        const avgLast        = last.video_count  ? last.view_count  / last.video_count  : 0;
         const avgViewsGrowth = pct(avgFirst, avgLast);
+        const vpsFirst       = first.subscriber_count ? first.view_count / first.subscriber_count : null;
+        const vpsLast        = last.subscriber_count  ? last.view_count  / last.subscriber_count  : null;
+        const vpsGrowth      = pct(vpsFirst, vpsLast);
 
-        const eFirst = engMap[cid + '|' + first.snapshot_date];
-        const eLast  = engMap[cid + '|' + last.snapshot_date];
-        const engFirst = eFirst && eFirst.views ? eFirst.likes / eFirst.views * 100 : null;
-        const engLast  = eLast  && eLast.views  ? eLast.likes  / eLast.views  * 100 : null;
-        const engChange = engFirst !== null && engLast !== null ? engLast - engFirst : null;
+        const vFirst = vidMap[cid + '|' + first.snapshot_date];
+        const vLast  = vidMap[cid + '|' + last.snapshot_date];
 
-        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, engChange});
+        const engFirst      = vFirst && vFirst.views ? vFirst.likes    / vFirst.views * 100 : null;
+        const engLast       = vLast  && vLast.views  ? vLast.likes     / vLast.views  * 100 : null;
+        const engChange     = engFirst !== null && engLast !== null ? engLast - engFirst : null;
+
+        const comFirst      = vFirst && vFirst.views ? vFirst.comments / vFirst.views * 100 : null;
+        const comLast       = vLast  && vLast.views  ? vLast.comments  / vLast.views  * 100 : null;
+        const commentChange = comFirst !== null && comLast !== null ? comLast - comFirst : null;
+
+        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, vpsGrowth, engChange, commentChange});
     }
 
-    const renderLeader = (canvasId, key, label, unit) => {
+    const renderLeader = (canvasId, key, label) => {
         const valid = stats.filter(s => s[key] !== null)
             .sort((a, b) => b[key] - a[key]).slice(0, topN);
         renderHBarChart(canvasId,
@@ -455,10 +474,12 @@ function renderGrowthLeaders() {
             label, 13, valid.map(s => s.cid));
     };
 
-    renderLeader('glViewsChart',   'viewGrowth',     'Views Growth %',      '%');
-    renderLeader('glAvgViewsChart','avgViewsGrowth', 'Avg Views/Video %',   '%');
-    renderLeader('glSubsChart',    'subGrowth',      'Subscriber Growth %', '%');
-    renderLeader('glEngChart',     'engChange',      'Engagement Δ pp',     'pp');
+    renderLeader('glViewsChart',    'viewGrowth',     'Views Growth %');
+    renderLeader('glAvgViewsChart', 'avgViewsGrowth', 'Avg Views/Video %');
+    renderLeader('glSubsChart',     'subGrowth',      'Subscriber Growth %');
+    renderLeader('glEngChart',      'engChange',      'Engagement Δ pp');
+    renderLeader('glVpsChart',      'vpsGrowth',      'Views/Subscriber %');
+    renderLeader('glCommentChart',  'commentChange',  'Comment Rate Δ pp');
 }
 
 function renderHBarChart(canvasId, labels, data, label, labelFontSize = 10, colorKeys = null) {
