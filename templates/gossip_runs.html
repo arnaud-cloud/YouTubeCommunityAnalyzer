@@ -27,8 +27,12 @@
             <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Fetch new comments from YouTube only. No LLM.</p>
             <button type="submit" class="btn btn-outline">Collect Comments</button>
         </form>
+        <form method="POST" action="{{ url_for('gossip.start_local', community_id=community.id) }}">
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Collect + local LLM steps only. Stops before any cloud API call.</p>
+            <button type="submit" class="btn btn-outline">Run Local Steps</button>
+        </form>
         <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → LLM summarize → analyze → report.</p>
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → summarize → analyze → report.</p>
             <button type="submit" class="btn btn-primary">Run Full Analysis</button>
         </form>
     </div>
@@ -111,6 +115,8 @@ function renderLog(raw) {
             return `<span style="color:#4ade80">✓ ${escHtml(name)}</span>  <span style="color:#a3e635">${escHtml(info)}</span>`;
         } else if (kind === 'quota') {
             return `<span style="color:#fb923c">⚡ ${escHtml(parts[1] || '')}</span>`;
+        } else if (kind === 'info') {
+            return `<span style="color:#fbbf24">ℹ ${escHtml(parts[1] || '')}</span>`;
         } else {
             return `<span style="color:#cbd5e1">${escHtml(line)}</span>`;
         }

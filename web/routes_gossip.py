@@ -5,7 +5,7 @@ import threading
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
 from core.db import get_db
-from core.gossip_pipeline import run_gossip_pipeline, run_collect_only
+from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps
 from core.gossip_report import generate_report_html
 
 bp = Blueprint("gossip", __name__)
@@ -81,6 +81,35 @@ def start_run(community_id):
     t.start()
 
     flash("Gossip pipeline started.", "success")
+    return redirect(url_for("gossip.runs", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/run-local", methods=["POST"])
+def start_local(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    active = conn.execute(
+        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active:
+        conn.close()
+        flash("A pipeline is already running for this community.", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(
+        target=run_local_steps, args=(db_path, community_id, run_id), daemon=True
+    )
+    t.start()
+    flash("Local pipeline started.", "success")
     return redirect(url_for("gossip.runs", community_id=community_id))
 
 
