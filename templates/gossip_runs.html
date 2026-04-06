@@ -18,6 +18,15 @@
         <div class="progress-bar">
             <div class="progress-fill" id="progress-fill"></div>
         </div>
+        <div id="quota-counter" style="margin-top:.75rem;display:none">
+            <div style="display:flex;justify-content:space-between;font-size:.8rem;color:#94a3b8;margin-bottom:.25rem">
+                <span>⚡ YouTube API quota</span>
+                <span id="quota-text">0 / 10,000</span>
+            </div>
+            <div style="background:#1e293b;border-radius:4px;height:6px;overflow:hidden">
+                <div id="quota-fill" style="height:100%;background:#fb923c;width:0%;transition:width .4s ease"></div>
+            </div>
+        </div>
         <p class="muted">Started: {{ active_run.started_at }}</p>
         {% if active_run.current_step in ('', 'collecting') and not queued_runs %}
         <div style="margin-top:1rem;display:flex;gap:1rem">
@@ -94,7 +103,9 @@
                     {% elif run.status == 'complete' %}
                     <span class="muted">comments only</span>
                     {% elif run.status == 'failed' %}
-                    <span class="muted" title="{{ run.error_message or '' }}">Failed</span>
+                    <form method="POST" action="{{ url_for('gossip.retry_report', run_id=run.id) }}" style="display:inline">
+                        <button type="submit" class="btn btn-sm btn-outline" title="{{ run.error_message or '' }}">Retry Report</button>
+                    </form>
                     {% else %}
                     -
                     {% endif %}
@@ -169,6 +180,16 @@ async function pollStatus() {
         document.getElementById('progress-fill').style.width = pct + '%';
 
         renderLog(data.progress_log);
+
+        const quotaUnits = data.quota_units || 0;
+        const quotaEl = document.getElementById('quota-counter');
+        if (quotaEl && (data.status === 'collecting' || quotaUnits > 0)) {
+            quotaEl.style.display = 'block';
+            document.getElementById('quota-text').textContent =
+                quotaUnits.toLocaleString() + ' / 10,000';
+            const pct = Math.min(100, (quotaUnits / 10000) * 100).toFixed(1);
+            document.getElementById('quota-fill').style.width = pct + '%';
+        }
 
         if (data.status === 'complete' || data.status === 'failed') {
             setTimeout(() => location.reload(), 1000);

@@ -62,6 +62,17 @@ def _make_progress(conn, run_id: int):
             detail = f"{ch} · {pos}: {title}" if ch else f"{pos}: {title}"
         elif kind == "done":
             detail = f"✓ {parts[1]}: {parts[2]}" if len(parts) >= 3 else msg
+        elif kind == "quota_update":
+            try:
+                used = int(parts[1])
+            except (IndexError, ValueError):
+                used = 0
+            conn.execute(
+                "UPDATE gossip_runs SET quota_units = ? WHERE id = ?",
+                (used, run_id),
+            )
+            conn.commit()
+            return
         elif kind == "quota":
             detail = parts[1] if len(parts) >= 2 else msg
         elif kind == "info":
@@ -239,6 +250,9 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
 
         # Step 5: Generate report
         _update_run(conn, run_id, "reporting", "Generating report...")
+        # Save analysis_id now so it survives even if report generation fails
+        conn.execute("UPDATE gossip_runs SET analysis_id = ? WHERE id = ?", (analysis_id, run_id))
+        conn.commit()
         log.info(f"[Run {run_id}] Step 5: Generating report")
         gossip_report.generate_report_html(conn, analysis_id)
 

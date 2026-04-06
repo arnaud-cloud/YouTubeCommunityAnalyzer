@@ -180,6 +180,10 @@ def collect_community(conn, community_id: int,
             )
         except Exception as e:
             log.error(f"Failed on channel {cid}: {e}", exc_info=True)
+        if progress_callback:
+            progress_callback(
+                f"quota_update\t{quota.total}\t{quota.DAILY_FREE_QUOTA}"
+            )
 
     summary = quota.summary()
     log.info("\n" + summary)

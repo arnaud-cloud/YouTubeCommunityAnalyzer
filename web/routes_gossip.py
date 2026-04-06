@@ -96,16 +96,22 @@ def start_run(community_id):
 def start_local(community_id):
     conn = get_db(current_app.config["DB_PATH"])
 
-    # Allow queuing behind a collect-only run; block if a full/local pipeline is running
-    active = conn.execute(
-        "SELECT id, current_step FROM gossip_runs "
-        "WHERE community_id = ? AND status NOT IN ('complete','failed')",
+    # Allow queuing ONE run behind a collect-only run; block everything else
+    active_runs = conn.execute(
+        "SELECT id, current_step, status FROM gossip_runs "
+        "WHERE community_id = ? AND status NOT IN ('complete','failed') "
+        "ORDER BY id ASC",
         (community_id,),
-    ).fetchone()
-    if active and active["current_step"] not in ("", "pending", "collecting"):
+    ).fetchall()
+    collecting_only = (
+        len(active_runs) == 1
+        and active_runs[0]["current_step"] in ("", "pending", "collecting")
+    )
+    if active_runs and not collecting_only:
         conn.close()
-        flash("A pipeline past the collect step is already running.", "error")
+        flash("A pipeline is already running or queued for this community.", "error")
         return redirect(url_for("gossip.runs", community_id=community_id))
+    active = active_runs[0] if active_runs else None
 
     cur = conn.execute(
         "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
@@ -161,13 +167,45 @@ def run_status(run_id):
     conn = get_db(current_app.config["DB_PATH"])
     row = conn.execute(
         "SELECT id, status, current_step, progress_detail, progress_log, "
-        "started_at, completed_at, analysis_id, error_message "
+        "quota_units, started_at, completed_at, analysis_id, error_message "
         "FROM gossip_runs WHERE id = ?", (run_id,)
     ).fetchone()
     conn.close()
     if not row:
         return jsonify({"error": "Run not found"}), 404
     return jsonify(dict(row))
+
+
+@bp.route("/run/<int:run_id>/retry-report", methods=["POST"])
+def retry_report(run_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    run = conn.execute(
+        "SELECT * FROM gossip_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    if not run:
+        conn.close()
+        flash("Run not found.", "error")
+        return redirect(url_for("main.home"))
+
+    analysis_id = run["analysis_id"]
+    if not analysis_id:
+        # Find the most recent analysis for this community
+        row = conn.execute(
+            "SELECT id FROM analysis_results WHERE community_id = ? ORDER BY id DESC LIMIT 1",
+            (run["community_id"],),
+        ).fetchone()
+        if not row:
+            conn.close()
+            flash("No analysis found for this community.", "error")
+            return redirect(url_for("gossip.runs", community_id=run["community_id"]))
+        analysis_id = row["id"]
+        conn.execute(
+            "UPDATE gossip_runs SET analysis_id = ? WHERE id = ?", (analysis_id, run_id)
+        )
+        conn.commit()
+
+    conn.close()
+    return redirect(url_for("gossip.report", analysis_id=analysis_id))
 
 
 @bp.route("/report/<int:analysis_id>")

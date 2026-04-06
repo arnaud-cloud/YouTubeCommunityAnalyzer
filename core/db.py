@@ -45,6 +45,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE gossip_runs ADD COLUMN progress_log TEXT DEFAULT ''"
         )
+    if "quota_units" not in runs_cols:
+        conn.execute(
+            "ALTER TABLE gossip_runs ADD COLUMN quota_units INTEGER DEFAULT 0"
+        )
 
 
 def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
