@@ -40,6 +40,56 @@ def _fail_run(conn, run_id: int, error: str):
     conn.commit()
 
 
+def _make_progress(conn, run_id: int):
+    """
+    Return a progress callback that:
+    - updates progress_detail with a short human-readable summary
+    - appends the raw tab-delimited message to progress_log
+    """
+    def progress(msg: str):
+        parts = msg.split("\t")
+        kind = parts[0] if parts else ""
+        if kind == "channel":
+            detail = f"{parts[1]} — {parts[2]}" if len(parts) >= 3 else msg
+        elif kind == "video":
+            detail = f"Video {parts[1]}: {parts[2][:50]}" if len(parts) >= 3 else msg
+        elif kind == "done":
+            detail = f"✓ {parts[1]}: {parts[2]}" if len(parts) >= 3 else msg
+        elif kind == "quota":
+            detail = parts[1] if len(parts) >= 2 else msg
+        else:
+            detail = msg
+        conn.execute(
+            "UPDATE gossip_runs SET progress_detail = ?, "
+            "progress_log = progress_log || ? || char(10) WHERE id = ?",
+            (detail, msg, run_id),
+        )
+        conn.commit()
+    return progress
+
+
+def run_collect_only(db_path: str, community_id: int, run_id: int):
+    """Run Step 1 only (comment collection). No LLM calls."""
+    conn = get_db(db_path)
+    try:
+        _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")
+        log.info(f"[Run {run_id}] Collect-only: fetching comments")
+        gossip_collect.collect_community(conn, community_id,
+                                         progress_callback=_make_progress(conn, run_id))
+        conn.execute(
+            "UPDATE gossip_runs SET status = 'complete', current_step = 'complete', "
+            "completed_at = datetime('now') WHERE id = ?",
+            (run_id,),
+        )
+        conn.commit()
+        log.info(f"[Run {run_id}] Comment collection complete.")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Collection failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
 def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
     """
     Execute the full 5-step gossip pipeline.
@@ -49,12 +99,7 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
     """
     conn = get_db(db_path)
     try:
-        def progress(detail):
-            conn.execute(
-                "UPDATE gossip_runs SET progress_detail = ? WHERE id = ?",
-                (detail, run_id),
-            )
-            conn.commit()
+        progress = _make_progress(conn, run_id)
 
         # Step 1: Collect comments
         _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")

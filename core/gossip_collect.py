@@ -119,10 +119,12 @@ def collect_channel_comments(
     )
     log.info(f"  {len(videos)} videos found")
 
+    if progress_callback:
+        progress_callback(f"channel\t{channel_name}\t{len(videos)} videos")
+
+    channel_new = 0
     for i, video in enumerate(videos, 1):
         vid_id = video["video_id"]
-        if progress_callback:
-            progress_callback(f"Collecting comments: {channel_name} video {i}/{len(videos)}")
         log.info(f"  [{i}/{len(videos)}] {video['title'][:65]}")
         _upsert_video(conn, video, channel_id)
 
@@ -130,8 +132,19 @@ def collect_channel_comments(
             youtube, vid_id, max_comments, fetch_replies, quota
         )
         new_count = _insert_comments(conn, comments, vid_id, channel_id)
+        channel_new += new_count
         log.info(f"    {len(comments)} fetched, {new_count} new")
+
+        if progress_callback:
+            status = "new" if new_count > 0 else "skip"
+            progress_callback(
+                f"video\t{i}/{len(videos)}\t{video['title'][:60]}"
+                f"\t{len(comments)} fetched\t{new_count} new\t{status}"
+            )
         time.sleep(0.3)
+
+    if progress_callback:
+        progress_callback(f"done\t{channel_name}\t{channel_new} new comments")
 
 
 def collect_community(conn, community_id: int,
@@ -169,4 +182,6 @@ def collect_community(conn, community_id: int,
 
     summary = quota.summary()
     log.info("\n" + summary)
+    if progress_callback:
+        progress_callback(f"quota\t{quota.total} / {quota.DAILY_FREE_QUOTA} units used")
     return summary

@@ -19,12 +19,19 @@
             <div class="progress-fill" id="progress-fill"></div>
         </div>
         <p class="muted">Started: {{ active_run.started_at }}</p>
+        <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
     </div>
     {% else %}
-    <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
-        <p>This will collect comments, extract gossip with LLM, aggregate metrics, run narrative synthesis, and generate a report.</p>
-        <button type="submit" class="btn btn-primary btn-lg">Run Gossip Analysis</button>
-    </form>
+    <div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap">
+        <form method="POST" action="{{ url_for('gossip.start_collect', community_id=community.id) }}">
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Fetch new comments from YouTube only. No LLM.</p>
+            <button type="submit" class="btn btn-outline">Collect Comments</button>
+        </form>
+        <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → LLM summarize → analyze → report.</p>
+            <button type="submit" class="btn btn-primary">Run Full Analysis</button>
+        </form>
+    </div>
     {% endif %}
 </div>
 
@@ -53,6 +60,8 @@
                 <td>
                     {% if run.analysis_id %}
                     <a href="{{ url_for('gossip.report', analysis_id=run.analysis_id) }}" class="btn btn-sm">View Report</a>
+                    {% elif run.status == 'complete' %}
+                    <span class="muted">comments only</span>
                     {% elif run.status == 'failed' %}
                     <span class="muted" title="{{ run.error_message or '' }}">Failed</span>
                     {% else %}
@@ -75,6 +84,44 @@
 const STEPS = ['pending','collecting','summarizing','aggregating','analyzing','reporting','complete'];
 const runId = {{ active_run.id }};
 
+function renderLog(raw) {
+    if (!raw) return;
+    const logEl = document.getElementById('progress-log');
+    if (!logEl) return;
+    const lines = raw.trim().split('\n');
+    logEl.innerHTML = lines.map(line => {
+        const parts = line.split('\t');
+        const kind = parts[0];
+        if (kind === 'channel') {
+            const name = parts[1] || '';
+            const info = parts[2] || '';
+            return `<span style="color:#7dd3fc;font-weight:bold">▶ ${escHtml(name)}</span>  <span style="color:#94a3b8">${escHtml(info)}</span>`;
+        } else if (kind === 'video') {
+            const pos   = parts[1] || '';
+            const title = parts[2] || '';
+            const fetched = parts[3] || '';
+            const newC  = parts[4] || '';
+            const status = parts[5] || '';
+            const newNum = parseInt((newC.match(/\d+/) || ['0'])[0]);
+            const newColor = newNum > 0 ? '#4ade80' : '#64748b';
+            return `  <span style="color:#64748b">${escHtml(pos)}</span>  ${escHtml(title.substring(0,55))}  <span style="color:#94a3b8">${escHtml(fetched)}</span>  <span style="color:${newColor}">${escHtml(newC)}</span>`;
+        } else if (kind === 'done') {
+            const name = parts[1] || '';
+            const info = parts[2] || '';
+            return `<span style="color:#4ade80">✓ ${escHtml(name)}</span>  <span style="color:#a3e635">${escHtml(info)}</span>`;
+        } else if (kind === 'quota') {
+            return `<span style="color:#fb923c">⚡ ${escHtml(parts[1] || '')}</span>`;
+        } else {
+            return `<span style="color:#cbd5e1">${escHtml(line)}</span>`;
+        }
+    }).join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 async function pollStatus() {
     try {
         const resp = await fetch(`/gossip/run/${runId}/status`);
@@ -87,6 +134,8 @@ async function pollStatus() {
         const idx = STEPS.indexOf(data.status);
         const pct = Math.max(0, Math.min(100, (idx / (STEPS.length - 1)) * 100));
         document.getElementById('progress-fill').style.width = pct + '%';
+
+        renderLog(data.progress_log);
 
         if (data.status === 'complete' || data.status === 'failed') {
             setTimeout(() => location.reload(), 1000);
