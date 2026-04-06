@@ -92,6 +92,29 @@ def run_collect_only(db_path: str, community_id: int, run_id: int):
         conn.close()
 
 
+def _wait_for_active_run(conn, community_id: int, own_run_id: int,
+                         timeout_s: int = 7200) -> bool:
+    """
+    Block until no other run is active for this community (or timeout).
+    Returns True if clear to proceed, False if timed out.
+    """
+    import time as _time
+    waited = 0
+    while waited < timeout_s:
+        other = conn.execute(
+            "SELECT id FROM gossip_runs "
+            "WHERE community_id = ? AND id != ? AND status NOT IN ('complete','failed')",
+            (community_id, own_run_id),
+        ).fetchone()
+        if not other:
+            return True
+        _time.sleep(5)
+        waited += 5
+        # re-open connection check (WAL mode keeps it fresh)
+        conn.execute("SELECT 1")  # keep alive
+    return False
+
+
 def run_local_steps(db_path: str, community_id: int, run_id: int):
     """
     Run pipeline steps that use only local (Ollama) LLM backends.
@@ -106,6 +129,21 @@ def run_local_steps(db_path: str, community_id: int, run_id: int):
         summarize_backend = settings.get("llm_summarize_backend", "ollama")
         analyze_backend   = settings.get("llm_analyze_backend", "anthropic")
         progress = _make_progress(conn, run_id)
+
+        # If another run (e.g. collect-only) is already active, wait for it
+        other = conn.execute(
+            "SELECT id, status FROM gossip_runs "
+            "WHERE community_id = ? AND id != ? AND status NOT IN ('complete','failed')",
+            (community_id, run_id),
+        ).fetchone()
+        if other:
+            _update_run(conn, run_id, "pending",
+                        f"Waiting for run #{other['id']} to finish...")
+            progress(f"info\tWaiting for run #{other['id']} ({other['status']}) to complete...")
+            if not _wait_for_active_run(conn, community_id, run_id):
+                _fail_run(conn, run_id, "Timed out waiting for previous run to finish.")
+                return
+            progress(f"info\tPrevious run finished — starting local steps")
 
         # Step 1: Collect (always local)
         _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")

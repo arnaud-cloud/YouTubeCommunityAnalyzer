@@ -87,13 +87,16 @@ def start_run(community_id):
 @bp.route("/<int:community_id>/run-local", methods=["POST"])
 def start_local(community_id):
     conn = get_db(current_app.config["DB_PATH"])
+
+    # Allow queuing behind a collect-only run; block if a full/local pipeline is running
     active = conn.execute(
-        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        "SELECT id, current_step FROM gossip_runs "
+        "WHERE community_id = ? AND status NOT IN ('complete','failed')",
         (community_id,),
     ).fetchone()
-    if active:
+    if active and active["current_step"] not in ("", "pending", "collecting"):
         conn.close()
-        flash("A pipeline is already running for this community.", "error")
+        flash("A pipeline past the collect step is already running.", "error")
         return redirect(url_for("gossip.runs", community_id=community_id))
 
     cur = conn.execute(
@@ -109,7 +112,10 @@ def start_local(community_id):
         target=run_local_steps, args=(db_path, community_id, run_id), daemon=True
     )
     t.start()
-    flash("Local pipeline started.", "success")
+    if active:
+        flash("Local pipeline queued — will start after current collection finishes.", "success")
+    else:
+        flash("Local pipeline started.", "success")
     return redirect(url_for("gossip.runs", community_id=community_id))
 
 
