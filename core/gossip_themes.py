@@ -297,11 +297,9 @@ def compute_themes(conn, community_id: int, use_llm: bool = False,
             "description": None,
         })
 
-    # Sort by recency first, then evidence count
-    candidates.sort(key=lambda x: (
-        -(x["last_seen_at"] or ""),
-        -x["total_evidence"],
-    ))
+    # Sort by recency first, then evidence count (both descending)
+    candidates.sort(key=lambda x: (x["last_seen_at"] or "", x["total_evidence"]),
+                    reverse=True)
 
     llm_backend = None
     if use_llm and candidates:
