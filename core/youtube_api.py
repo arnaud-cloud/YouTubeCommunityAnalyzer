@@ -8,6 +8,7 @@ service object so callers control API key management.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from datetime import datetime
@@ -218,6 +219,39 @@ class QuotaTracker:
             )
         lines.append(f"  TOTAL: {self.total} / {self.DAILY_FREE_QUOTA}")
         return "\n".join(lines)
+
+
+def is_quota_exceeded(error: HttpError) -> bool:
+    """Return True if the error is a YouTube quota exceeded error."""
+    if error.resp.status != 403:
+        return False
+    try:
+        content = json.loads(error.content)
+        for err in content.get("error", {}).get("errors", []):
+            if err.get("reason") in ("quotaExceeded", "dailyLimitExceeded"):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def fetch_channels_subscriber_counts(youtube, channel_ids: list[str]) -> dict[str, int]:
+    """
+    Batch-fetch subscriber counts for multiple channel IDs.
+    Costs 1 API unit per 50 channels. Returns {channel_id: subscriber_count}.
+    """
+    counts: dict[str, int] = {}
+    for i in range(0, len(channel_ids), 50):
+        chunk = channel_ids[i:i + 50]
+        resp = youtube.channels().list(
+            part="statistics",
+            id=",".join(chunk),
+            maxResults=50,
+        ).execute()
+        for item in resp.get("items", []):
+            cid = item["id"]
+            counts[cid] = int(item.get("statistics", {}).get("subscriberCount", 0))
+    return counts
 
 
 def channel_id_to_uploads_playlist(channel_id: str) -> str:

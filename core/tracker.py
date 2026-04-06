@@ -18,8 +18,10 @@ from .youtube_api import (
     build_youtube,
     fetch_all_video_ids,
     fetch_channel_stats,
+    fetch_channels_subscriber_counts,
     fetch_recent_video_ids,
     fetch_video_details,
+    is_quota_exceeded,
 )
 
 log = logging.getLogger(__name__)
@@ -36,6 +38,8 @@ def collect_channel_snapshot(conn, youtube, channel_id: str) -> dict | None:
     try:
         stats = fetch_channel_stats(youtube, channel_id)
     except HttpError as e:
+        if is_quota_exceeded(e):
+            raise
         log.error(f"Channel stats error for {channel_id}: {e}")
         return None
 
@@ -124,6 +128,8 @@ def collect_video_snapshots(conn, youtube, channel_id: str,
     try:
         videos = fetch_video_details(youtube, all_ids)
     except HttpError as e:
+        if is_quota_exceeded(e):
+            raise
         log.error(f"  Video details error: {e}")
         return 0
 
@@ -209,3 +215,93 @@ def collect_all_communities(conn, youtube, backfill: bool = False) -> None:
     communities = conn.execute("SELECT id FROM communities").fetchall()
     for row in communities:
         collect_community(conn, youtube, row["id"], backfill=backfill)
+
+
+def collect_prioritized(conn, youtube) -> None:
+    """
+    Quota-aware collection across all communities.
+
+    Priority order:
+      1. Channels with no snapshots yet, sorted by subscriber_count ascending
+         (batch-fetched cheaply so we maximise new channels per quota unit).
+      2. Channels with existing snapshots, stalest first.
+
+    Stops gracefully and logs remaining channels when YouTube returns a
+    quotaExceeded / dailyLimitExceeded error.
+    """
+    all_rows = conn.execute(
+        "SELECT DISTINCT channel_id FROM community_channels"
+    ).fetchall()
+    all_ids = [r["channel_id"] for r in all_rows]
+
+    if not all_ids:
+        log.warning("No channels in any community.")
+        return
+
+    # Split by whether any snapshot exists
+    new_ids: list[str] = []
+    existing_ids: list[str] = []
+    for cid in all_ids:
+        has_data = conn.execute(
+            "SELECT 1 FROM channel_snapshots WHERE channel_id = ? LIMIT 1", (cid,)
+        ).fetchone()
+        if has_data:
+            existing_ids.append(cid)
+        else:
+            new_ids.append(cid)
+
+    log.info(f"Channels: {len(new_ids)} new (no data yet), {len(existing_ids)} existing")
+
+    # Sort new channels by subscriber count ascending (smallest → most new channels per unit)
+    if new_ids:
+        try:
+            sub_counts = fetch_channels_subscriber_counts(youtube, new_ids)
+            new_ids.sort(key=lambda cid: sub_counts.get(cid, 0))
+            log.info(
+                f"New channel order (smallest first): "
+                + ", ".join(
+                    f"{cid}({sub_counts.get(cid,0):,})" for cid in new_ids[:5]
+                )
+                + ("..." if len(new_ids) > 5 else "")
+            )
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                log.error("Quota exceeded even before collection started.")
+                return
+            log.warning(f"Could not pre-fetch subscriber counts: {e}")
+            # Proceed without sorting
+
+    # Sort existing channels stalest first
+    if existing_ids:
+        staleness: dict[str, str] = {}
+        for cid in existing_ids:
+            row = conn.execute(
+                "SELECT MAX(snapshot_date) FROM channel_snapshots WHERE channel_id = ?",
+                (cid,),
+            ).fetchone()
+            staleness[cid] = row[0] or ""
+        existing_ids.sort(key=lambda cid: staleness[cid])
+
+    ordered = new_ids + existing_ids
+    collected = 0
+
+    for i, cid in enumerate(ordered):
+        try:
+            stats = collect_channel_snapshot(conn, youtube, cid)
+            if stats and stats.get("uploads_playlist"):
+                collect_video_snapshots(conn, youtube, cid, stats["uploads_playlist"])
+            collected += 1
+            time.sleep(0.3)
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                remaining = len(ordered) - i
+                log.warning(
+                    f"YouTube quota exceeded after {collected} channels. "
+                    f"{remaining} channel(s) not collected today."
+                )
+                break
+            log.error(f"HTTP error collecting {cid}: {e}")
+        except Exception as e:
+            log.error(f"Unexpected error collecting {cid}: {e}", exc_info=True)
+
+    log.info(f"Prioritized collection done: {collected}/{len(ordered)} channels collected.")

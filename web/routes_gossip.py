@@ -5,7 +5,7 @@ import threading
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
 from core.db import get_db
-from core.gossip_pipeline import run_gossip_pipeline
+from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps
 from core.gossip_report import generate_report_html
 
 bp = Blueprint("gossip", __name__)
@@ -23,12 +23,19 @@ def runs(community_id):
         flash("Community not found.", "error")
         return redirect(url_for("main.home"))
 
-    # Active run?
+    # Currently running (non-pending) run
     active_run = conn.execute("""
         SELECT * FROM gossip_runs
-        WHERE community_id = ? AND status NOT IN ('complete', 'failed')
-        ORDER BY id DESC LIMIT 1
+        WHERE community_id = ? AND status NOT IN ('complete', 'failed', 'pending')
+        ORDER BY id ASC LIMIT 1
     """, (community_id,)).fetchone()
+
+    # Queued (pending) runs
+    queued_runs = conn.execute("""
+        SELECT * FROM gossip_runs
+        WHERE community_id = ? AND status = 'pending'
+        ORDER BY id ASC
+    """, (community_id,)).fetchall()
 
     # Run history
     history = conn.execute("""
@@ -45,6 +52,7 @@ def runs(community_id):
         "gossip_runs.html",
         community=dict(community),
         active_run=dict(active_run) if active_run else None,
+        queued_runs=[dict(r) for r in queued_runs],
         history=[dict(r) for r in history],
     )
 
@@ -84,11 +92,77 @@ def start_run(community_id):
     return redirect(url_for("gossip.runs", community_id=community_id))
 
 
+@bp.route("/<int:community_id>/run-local", methods=["POST"])
+def start_local(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+
+    # Allow queuing behind a collect-only run; block if a full/local pipeline is running
+    active = conn.execute(
+        "SELECT id, current_step FROM gossip_runs "
+        "WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active and active["current_step"] not in ("", "pending", "collecting"):
+        conn.close()
+        flash("A pipeline past the collect step is already running.", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(
+        target=run_local_steps, args=(db_path, community_id, run_id), daemon=True
+    )
+    t.start()
+    if active:
+        flash("Local pipeline queued — will start after current collection finishes.", "success")
+    else:
+        flash("Local pipeline started.", "success")
+    return redirect(url_for("gossip.runs", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/collect", methods=["POST"])
+def start_collect(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    active = conn.execute(
+        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active:
+        conn.close()
+        flash("A pipeline is already running for this community.", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(
+        target=run_collect_only, args=(db_path, community_id, run_id), daemon=True
+    )
+    t.start()
+    flash("Comment collection started.", "success")
+    return redirect(url_for("gossip.runs", community_id=community_id))
+
+
 @bp.route("/run/<int:run_id>/status")
 def run_status(run_id):
     conn = get_db(current_app.config["DB_PATH"])
     row = conn.execute(
-        "SELECT * FROM gossip_runs WHERE id = ?", (run_id,)
+        "SELECT id, status, current_step, progress_detail, progress_log, "
+        "started_at, completed_at, analysis_id, error_message "
+        "FROM gossip_runs WHERE id = ?", (run_id,)
     ).fetchone()
     conn.close()
     if not row:

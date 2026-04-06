@@ -40,6 +40,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
             WHERE last_comment_published_at IS NULL
         """)
 
+    runs_cols = {row[1] for row in conn.execute("PRAGMA table_info(gossip_runs)")}
+    if "progress_log" not in runs_cols:
+        conn.execute(
+            "ALTER TABLE gossip_runs ADD COLUMN progress_log TEXT DEFAULT ''"
+        )
+
 
 def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
     """Read a single setting value."""
