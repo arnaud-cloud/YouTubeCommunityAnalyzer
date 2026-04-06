@@ -46,13 +46,17 @@ def _make_progress(conn, run_id: int):
     - updates progress_detail with a short human-readable summary
     - appends the raw tab-delimited message to progress_log
     """
+    current_channel: list[str | None] = [None]
+
     def progress(msg: str):
         parts = msg.split("\t")
         kind = parts[0] if parts else ""
         if kind == "channel":
+            current_channel[0] = parts[1] if len(parts) >= 2 else None
             detail = f"{parts[1]} — {parts[2]}" if len(parts) >= 3 else msg
         elif kind == "video":
-            detail = f"Video {parts[1]}: {parts[2][:50]}" if len(parts) >= 3 else msg
+            ch = f"{current_channel[0]} · " if current_channel[0] else ""
+            detail = f"{ch}video {parts[1]}: {parts[2][:40]}" if len(parts) >= 3 else msg
         elif kind == "done":
             detail = f"✓ {parts[1]}: {parts[2]}" if len(parts) >= 3 else msg
         elif kind == "quota":
