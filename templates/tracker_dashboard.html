@@ -124,7 +124,7 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
     </div>
     <div class="chart-row">
         <div class="chart-container half">
-            <h2>Views per Subscriber Growth (%)</h2>
+            <h2>Views per Subscriber</h2>
             <canvas id="glVpsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
@@ -447,9 +447,7 @@ function renderGrowthLeaders() {
         const avgFirst       = first.video_count ? first.view_count / first.video_count : 0;
         const avgLast        = last.video_count  ? last.view_count  / last.video_count  : 0;
         const avgViewsGrowth = pct(avgFirst, avgLast);
-        const vpsFirst       = first.subscriber_count ? first.view_count / first.subscriber_count : null;
-        const vpsLast        = last.subscriber_count  ? last.view_count  / last.subscriber_count  : null;
-        const vpsGrowth      = pct(vpsFirst, vpsLast);
+        const vps            = last.subscriber_count ? last.view_count / last.subscriber_count : null;
 
         const vFirst = vidMap[cid + '|' + first.snapshot_date];
         const vLast  = vidMap[cid + '|' + last.snapshot_date];
@@ -462,7 +460,7 @@ function renderGrowthLeaders() {
         const comLast       = vLast  && vLast.views  ? vLast.comments  / vLast.views  * 100 : null;
         const commentChange = comFirst !== null && comLast !== null ? comLast - comFirst : null;
 
-        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, vpsGrowth, engChange, commentChange});
+        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, vps, engChange, commentChange});
     }
 
     const renderLeader = (canvasId, key, label) => {
@@ -478,7 +476,7 @@ function renderGrowthLeaders() {
     renderLeader('glAvgViewsChart', 'avgViewsGrowth', 'Avg Views/Video %');
     renderLeader('glSubsChart',     'subGrowth',      'Subscriber Growth %');
     renderLeader('glEngChart',      'engChange',      'Engagement Δ pp');
-    renderLeader('glVpsChart',      'vpsGrowth',      'Views/Subscriber %');
+    renderLeader('glVpsChart',      'vps',            'Views per Subscriber');
     renderLeader('glCommentChart',  'commentChange',  'Comment Rate Δ pp');
 }
 
