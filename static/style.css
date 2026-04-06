@@ -230,6 +230,42 @@ a:hover { color: var(--accent-hover); }
 .flash-success { background: rgba(46,204,113,0.15); border: 1px solid var(--success); }
 .flash-error { background: rgba(231,76,60,0.15); border: 1px solid var(--danger); }
 
+/* Metric info tooltip */
+.metric-info {
+    display: inline-block;
+    position: relative;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--muted);
+    cursor: default;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+    line-height: 1;
+}
+.metric-info:hover { color: var(--accent); }
+.metric-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.5;
+    width: 260px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 200;
+    pointer-events: none;
+    text-transform: none;
+    letter-spacing: 0;
+    font-style: normal;
+}
+.metric-info:hover .metric-tooltip { display: block; }
+
 /* Community manage matrix */
 .manage-hint {
     color: var(--muted);

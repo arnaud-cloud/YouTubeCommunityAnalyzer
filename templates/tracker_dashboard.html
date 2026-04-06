@@ -104,31 +104,43 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
     </div>
     <div class="chart-row">
         <div class="chart-container half">
-            <h2>Total Views Growth (%)</h2>
+            <h2>Total Views Growth (%)
+                <span class="metric-info">ℹ<span class="metric-tooltip">% increase in total views from the first to the latest snapshot. Measures raw audience reach expansion — how fast a channel is accumulating viewers over time.</span></span>
+            </h2>
             <canvas id="glViewsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
-            <h2>Avg Views / Video Growth (%)</h2>
+            <h2>Avg Views / Video Growth (%)
+                <span class="metric-info">ℹ<span class="metric-tooltip">% change in average views per video. Separates channels that grow by publishing more content from those whose individual videos genuinely perform better over time.</span></span>
+            </h2>
             <canvas id="glAvgViewsChart" height="220"></canvas>
         </div>
     </div>
     <div class="chart-row">
         <div class="chart-container half">
-            <h2>Subscriber Growth (%)</h2>
+            <h2>Subscriber Growth (%)
+                <span class="metric-info">ℹ<span class="metric-tooltip">% increase in subscriber count from first to latest snapshot. Subscribers are a channel's loyal core audience — growth here signals long-term health and sustained interest.</span></span>
+            </h2>
             <canvas id="glSubsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
-            <h2>Engagement Rate (%)</h2>
+            <h2>Engagement Rate (%)
+                <span class="metric-info">ℹ<span class="metric-tooltip">Likes ÷ Views × 100, from the latest snapshot. Filters passive views from genuine approval — a high rate means the audience is invested, not just scrolling past. Size-agnostic: comparable across channels of any scale.</span></span>
+            </h2>
             <canvas id="glEngChart" height="220"></canvas>
         </div>
     </div>
     <div class="chart-row">
         <div class="chart-container half">
-            <h2>Views per Subscriber</h2>
+            <h2>Views per Subscriber
+                <span class="metric-info">ℹ<span class="metric-tooltip">Total views ÷ total subscribers, from the latest snapshot. Measures how effectively a channel converts its subscriber base into actual viewers. A high ratio means subscribers keep coming back; a low ratio signals a large but passive audience.</span></span>
+            </h2>
             <canvas id="glVpsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
-            <h2>Comment Rate (%)</h2>
+            <h2>Comment Rate (%)
+                <span class="metric-info">ℹ<span class="metric-tooltip">Comments ÷ Views × 100, from the latest snapshot. Comments require more effort than likes, so this measures genuine community interaction. Channels with a high comment rate are provoking real conversation, not just passive consumption.</span></span>
+            </h2>
             <canvas id="glCommentChart" height="220"></canvas>
         </div>
     </div>
