@@ -18,8 +18,19 @@ def create_app(db_path=None):
     app.config["DB_PATH"] = str(db_path or DEFAULT_DB)
     app.secret_key = "youtube-community-analyzer-local"
 
-    # Ensure DB is initialised
+    # Ensure DB is initialised; clean up any runs left stuck by a previous crash/restart
     conn = get_db(app.config["DB_PATH"])
+    stuck = conn.execute(
+        "UPDATE gossip_runs SET status='failed', error_message='Server was restarted', "
+        "completed_at=datetime('now') "
+        "WHERE status NOT IN ('complete','failed')"
+    ).rowcount
+    conn.commit()
+    if stuck:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Marked {stuck} stuck gossip run(s) as failed (server restart)."
+        )
     conn.close()
 
     from .routes_main import bp as main_bp
