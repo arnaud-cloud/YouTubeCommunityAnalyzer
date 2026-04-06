@@ -70,6 +70,8 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
     <div class="stat-tile"><span class="stat-value" id="tile-subs">-</span><span class="stat-label">Total Subscribers</span></div>
     <div class="stat-tile"><span class="stat-value" id="tile-views">-</span><span class="stat-label">Total Views</span></div>
     <div class="stat-tile"><span class="stat-value" id="tile-videos">-</span><span class="stat-label">Total Videos</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-age">-</span><span class="stat-label" id="tile-age-label">Channel Age</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-vpm">-</span><span class="stat-label">Avg Videos / Month</span><span class="stat-sublabel" style="font-size:0.7rem;color:var(--muted);display:block">(last 6 months)</span></div>
 </div>
 
 
@@ -300,6 +302,34 @@ function renderDashboard(channelFilter) {
         firstTileVal.textContent = avgViewsPerVideo.toLocaleString();
         firstTileLabel.textContent = 'Avg Views / Video';
     }
+
+    // Channel Age tile
+    const now = new Date();
+    const agePubs = channels
+        .map(c => c.published_at ? new Date(c.published_at) : null)
+        .filter(Boolean);
+    if (agePubs.length) {
+        const avgAgeMs = agePubs.reduce((sum, d) => sum + (now - d), 0) / agePubs.length;
+        const totalMonths = Math.floor(avgAgeMs / (1000 * 60 * 60 * 24 * 30.44));
+        const yrs = Math.floor(totalMonths / 12);
+        const mos = totalMonths % 12;
+        const ageStr = mos > 0 ? `${yrs} yr ${mos} mo` : `${yrs} yr`;
+        if (channelFilter !== 'all' && agePubs.length === 1) {
+            document.getElementById('tile-age').textContent = `${agePubs[0].getFullYear()} · ${ageStr}`;
+            document.getElementById('tile-age-label').textContent = 'Channel Age';
+        } else {
+            document.getElementById('tile-age').textContent = ageStr;
+            document.getElementById('tile-age-label').textContent = 'Avg Channel Age';
+        }
+    } else {
+        document.getElementById('tile-age').textContent = '—';
+    }
+
+    // Avg Videos/Month (last 6 months)
+    const sixMonthsAgo = new Date(now);
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+    const recentVids = videos.filter(v => v.published_at && new Date(v.published_at) >= sixMonthsAgo);
+    document.getElementById('tile-vpm').textContent = (recentVids.length / 6).toFixed(1);
 
     // Channel name lookup
     const cname = {};

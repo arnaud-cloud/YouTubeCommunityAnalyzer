@@ -58,7 +58,7 @@ def dashboard_data(community_id):
 
     # Channel info
     channels = [dict(r) for r in conn.execute(
-        f"SELECT channel_id, channel_name, handle, thumbnail_url FROM channels WHERE channel_id IN ({placeholders})",
+        f"SELECT channel_id, channel_name, handle, thumbnail_url, published_at FROM channels WHERE channel_id IN ({placeholders})",
         channel_ids,
     ).fetchall()]
 
