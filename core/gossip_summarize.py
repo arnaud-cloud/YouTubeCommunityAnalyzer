@@ -312,9 +312,12 @@ def summarize_community(conn, community_id: int,
             continue
 
         # Normalise output: accept {"videos": [...]} or bare list or single dict
-        raw = result.get("videos", [])
-        if not isinstance(raw, list):
-            raw = [raw] if isinstance(raw, dict) else []
+        if isinstance(result, list):
+            raw = result
+        else:
+            raw = result.get("videos", [])
+            if not isinstance(raw, list):
+                raw = [raw] if isinstance(raw, dict) else []
 
         # Index by video_id; warn about unexpected IDs
         expected_ids = {item[_VI_ID] for item in batch}
