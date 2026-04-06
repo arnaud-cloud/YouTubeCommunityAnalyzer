@@ -145,3 +145,67 @@ def delete(community_id):
     conn.close()
     flash("Community deleted.", "success")
     return redirect(url_for("main.home"))
+
+
+@bp.route("/manage")
+def manage():
+    """Matrix view: all channels × all communities."""
+    conn = get_db(current_app.config["DB_PATH"])
+
+    communities = [dict(r) for r in conn.execute(
+        "SELECT id, name FROM communities ORDER BY name"
+    ).fetchall()]
+
+    channels = [dict(r) for r in conn.execute("""
+        SELECT ch.channel_id, ch.channel_name, ch.handle, ch.thumbnail_url,
+               (SELECT subscriber_count FROM channel_snapshots cs
+                WHERE cs.channel_id = ch.channel_id
+                ORDER BY cs.snapshot_date DESC LIMIT 1) AS subscriber_count
+        FROM channels ch
+        ORDER BY ch.channel_name
+    """).fetchall()]
+
+    # Build set of (community_id, channel_id) memberships
+    memberships = set()
+    for row in conn.execute("SELECT community_id, channel_id FROM community_channels"):
+        memberships.add((row["community_id"], row["channel_id"]))
+
+    conn.close()
+    return render_template(
+        "community_manage.html",
+        communities=communities,
+        channels=channels,
+        memberships=memberships,
+    )
+
+
+@bp.route("/assign", methods=["POST"])
+def assign():
+    """AJAX: add a channel to a community."""
+    data = request.get_json()
+    community_id = data.get("community_id")
+    channel_id = data.get("channel_id")
+    conn = get_db(current_app.config["DB_PATH"])
+    conn.execute(
+        "INSERT OR IGNORE INTO community_channels (community_id, channel_id) VALUES (?, ?)",
+        (community_id, channel_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})
+
+
+@bp.route("/unassign", methods=["POST"])
+def unassign():
+    """AJAX: remove a channel from a community."""
+    data = request.get_json()
+    community_id = data.get("community_id")
+    channel_id = data.get("channel_id")
+    conn = get_db(current_app.config["DB_PATH"])
+    conn.execute(
+        "DELETE FROM community_channels WHERE community_id = ? AND channel_id = ?",
+        (community_id, channel_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True})

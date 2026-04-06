@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Manage Communities — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Manage Communities</h1>
+    <a href="{{ url_for('community.new') }}" class="btn btn-primary">+ New Community</a>
+</div>
+
+{% if not communities %}
+<div class="empty-state">
+    <p>No communities yet. <a href="{{ url_for('community.new') }}">Create one</a> to get started.</p>
+</div>
+{% elif not channels %}
+<div class="empty-state">
+    <p>No channels in the system yet. Add channels via a community's edit page.</p>
+</div>
+{% else %}
+
+<p class="manage-hint">Check a box to add a channel to a community — uncheck to remove it. A channel can belong to multiple communities.</p>
+
+<div class="manage-table-wrap">
+<table class="manage-table">
+    <thead>
+        <tr>
+            <th class="col-channel">Channel</th>
+            <th class="col-subs">Subscribers</th>
+            {% for c in communities %}
+            <th class="col-community">
+                <a href="{{ url_for('tracker.dashboard', community_id=c.id) }}">{{ c.name }}</a>
+            </th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for ch in channels %}
+        <tr>
+            <td class="col-channel">
+                <div class="channel-cell">
+                    {% if ch.thumbnail_url %}
+                    <img src="{{ ch.thumbnail_url }}" class="ch-thumb" alt="">
+                    {% else %}
+                    <div class="ch-thumb ch-thumb-placeholder"></div>
+                    {% endif %}
+                    <div>
+                        <div class="ch-name">{{ ch.channel_name }}</div>
+                        {% if ch.handle %}<div class="ch-handle">{{ ch.handle }}</div>{% endif %}
+                    </div>
+                </div>
+            </td>
+            <td class="col-subs">
+                {{ "{:,}".format(ch.subscriber_count) if ch.subscriber_count else "—" }}
+            </td>
+            {% for c in communities %}
+            <td class="col-community">
+                <label class="cb-wrap">
+                    <input type="checkbox"
+                           class="community-cb"
+                           data-community="{{ c.id }}"
+                           data-channel="{{ ch.channel_id }}"
+                           {% if (c.id, ch.channel_id) in memberships %}checked{% endif %}>
+                    <span class="cb-box"></span>
+                </label>
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<div id="manage-toast" class="manage-toast" aria-live="polite"></div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let toastTimer;
+
+function showToast(msg, ok) {
+    const t = document.getElementById('manage-toast');
+    t.textContent = msg;
+    t.className = 'manage-toast ' + (ok ? 'toast-ok' : 'toast-err') + ' toast-show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('toast-show'), 2000);
+}
+
+document.querySelectorAll('.community-cb').forEach(cb => {
+    cb.addEventListener('change', async () => {
+        const communityId = parseInt(cb.dataset.community);
+        const channelId   = cb.dataset.channel;
+        const url = cb.checked ? '/community/assign' : '/community/unassign';
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({community_id: communityId, channel_id: channelId}),
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                showToast(cb.checked ? 'Added to community.' : 'Removed from community.', true);
+            } else {
+                cb.checked = !cb.checked;
+                showToast('Error updating membership.', false);
+            }
+        } catch (e) {
+            cb.checked = !cb.checked;
+            showToast('Network error.', false);
+        }
+    });
+});
+</script>
+{% endblock %}
