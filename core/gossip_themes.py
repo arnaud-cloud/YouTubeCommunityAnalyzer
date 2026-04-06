@@ -126,7 +126,11 @@ def activity_chart_svg(activity: dict, title: str = "", width: int = 700) -> str
             )
         # Month label (every other one if dense)
         if n <= 18 or i % 2 == 0:
-            label = m[5:] if len(m) >= 7 else m  # show MM only
+            try:
+                from datetime import datetime as _dt
+                label = _dt.strptime(m, "%Y-%m").strftime("%b '%y")
+            except Exception:
+                label = m
             out.append(
                 f'<text x="{xc(i):.1f}" y="{mt+ch+16}" text-anchor="middle" '
                 f'fill="#888" font-size="9" '
