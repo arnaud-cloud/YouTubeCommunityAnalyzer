@@ -23,12 +23,19 @@ def runs(community_id):
         flash("Community not found.", "error")
         return redirect(url_for("main.home"))
 
-    # Active run?
+    # Currently running (non-pending) run
     active_run = conn.execute("""
         SELECT * FROM gossip_runs
-        WHERE community_id = ? AND status NOT IN ('complete', 'failed')
-        ORDER BY id DESC LIMIT 1
+        WHERE community_id = ? AND status NOT IN ('complete', 'failed', 'pending')
+        ORDER BY id ASC LIMIT 1
     """, (community_id,)).fetchone()
+
+    # Queued (pending) runs
+    queued_runs = conn.execute("""
+        SELECT * FROM gossip_runs
+        WHERE community_id = ? AND status = 'pending'
+        ORDER BY id ASC
+    """, (community_id,)).fetchall()
 
     # Run history
     history = conn.execute("""
@@ -45,6 +52,7 @@ def runs(community_id):
         "gossip_runs.html",
         community=dict(community),
         active_run=dict(active_run) if active_run else None,
+        queued_runs=[dict(r) for r in queued_runs],
         history=[dict(r) for r in history],
     )
 

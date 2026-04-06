@@ -19,7 +19,7 @@
             <div class="progress-fill" id="progress-fill"></div>
         </div>
         <p class="muted">Started: {{ active_run.started_at }}</p>
-        {% if active_run.current_step in ('', 'pending', 'collecting') %}
+        {% if active_run.current_step in ('', 'collecting') and not queued_runs %}
         <div style="margin-top:1rem;display:flex;gap:1rem">
             <form method="POST" action="{{ url_for('gossip.start_local', community_id=community.id) }}">
                 <button type="submit" class="btn btn-outline btn-sm">Queue: Run Local Steps</button>
@@ -31,6 +31,23 @@
         {% endif %}
         <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
     </div>
+    {% for qr in queued_runs %}
+    <div style="margin-top:.75rem;padding:.6rem 1rem;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.9rem">
+        ⏳ Run #{{ qr.id }} queued — waiting for current run to finish
+    </div>
+    {% endfor %}
+    {% elif queued_runs %}
+    {% for qr in queued_runs %}
+    <div class="run-card active" id="active-run" data-run-id="{{ qr.id }}" data-step="pending">
+        <div class="run-status">
+            <span class="status-badge status-pending">pending</span>
+            <span class="run-detail" id="run-detail">Waiting to start...</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+        <p class="muted">Queued: {{ qr.started_at }}</p>
+        <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+    {% endfor %}
     {% else %}
     <div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap">
         <form method="POST" action="{{ url_for('gossip.start_collect', community_id=community.id) }}">
