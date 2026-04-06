@@ -71,6 +71,10 @@
             <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → summarize → analyze → report.</p>
             <button type="submit" class="btn btn-primary">Run Full Analysis</button>
         </form>
+        <form method="POST" action="{{ url_for('gossip.start_force_summarize', community_id=community.id) }}">
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Re-summarize all videos with current LLM. Skips collection.</p>
+            <button type="submit" class="btn btn-outline">Force Re-summarize</button>
+        </form>
     </div>
     {% endif %}
 </div>

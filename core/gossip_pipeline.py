@@ -217,6 +217,55 @@ def run_local_steps(db_path: str, community_id: int, run_id: int):
         conn.close()
 
 
+def run_force_summarize(db_path: str, community_id: int, run_id: int):
+    """
+    Re-summarize ALL videos (force=True), then aggregate.
+    Skips collection. Stops before analyze (respects backend settings).
+    Used to reprocess existing summaries with a different LLM backend.
+    """
+    conn = get_db(db_path)
+    try:
+        settings = get_all_settings(conn)
+        analyze_backend = settings.get("llm_analyze_backend", "anthropic")
+        progress = _make_progress(conn, run_id)
+
+        _update_run(conn, run_id, "summarizing", "Force re-summarizing all videos...")
+        log.info(f"[Run {run_id}] Force summarize — Step 1: Summarizing (force=True)")
+        progress("info\tForce mode: reprocessing all videos regardless of prior summaries")
+        gossip_summarize.summarize_community(conn, community_id,
+                                             force=True, progress_callback=progress)
+
+        _update_run(conn, run_id, "aggregating", "Computing metrics...")
+        log.info(f"[Run {run_id}] Force summarize — Step 2: Aggregating")
+        agg_id = gossip_aggregate.aggregate_community(conn, community_id,
+                                                      progress_callback=progress)
+
+        if analyze_backend != "ollama":
+            progress(f"info\tStopped before analyze — backend is '{analyze_backend}' (not local)")
+            conn.execute(
+                "UPDATE gossip_runs SET status='complete', current_step='complete', "
+                "completed_at=datetime('now') WHERE id=?", (run_id,)
+            )
+            conn.commit()
+            return
+
+        _update_run(conn, run_id, "analyzing", "Running local LLM analysis...")
+        log.info(f"[Run {run_id}] Force summarize — Step 3: Analyzing (ollama)")
+        analysis_id = gossip_analyze.analyze_aggregation(conn, agg_id,
+                                                         progress_callback=progress)
+
+        _update_run(conn, run_id, "reporting", "Generating report...")
+        gossip_report.generate_report_html(conn, analysis_id)
+        _complete_run(conn, run_id, analysis_id)
+        log.info(f"[Run {run_id}] Force summarize complete. Analysis ID: {analysis_id}")
+
+    except Exception as e:
+        log.error(f"[Run {run_id}] Force summarize failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
 def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
     """
     Execute the full 5-step gossip pipeline.
