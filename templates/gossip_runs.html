@@ -69,10 +69,16 @@
         </form>
         <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
             <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → summarize → analyze → report.</p>
+            {% if cost_estimates %}
+            <p style="margin-bottom:.5rem;color:#fb923c;font-size:.8rem">⚡ ~{{ cost_estimates.incremental.videos }} videos · ~${{ "%.2f"|format(cost_estimates.incremental.cost) }} ({{ cost_estimates.incremental.model }})</p>
+            {% endif %}
             <button type="submit" class="btn btn-primary">Run Full Analysis</button>
         </form>
         <form method="POST" action="{{ url_for('gossip.start_force_summarize', community_id=community.id) }}">
             <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Re-summarize all videos with current LLM. Skips collection.</p>
+            {% if cost_estimates %}
+            <p style="margin-bottom:.5rem;color:#fb923c;font-size:.8rem">⚡ ~{{ cost_estimates.force.videos }} videos · ~${{ "%.2f"|format(cost_estimates.force.cost) }} ({{ cost_estimates.force.model }})</p>
+            {% endif %}
             <button type="submit" class="btn btn-outline">Force Re-summarize</button>
         </form>
     </div>

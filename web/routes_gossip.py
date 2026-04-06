@@ -1,14 +1,93 @@
 """Gossip pipeline routes — trigger, status polling, report viewing."""
 
+import math
 import threading
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
-from core.db import get_db
+from core.db import get_db, get_all_settings, get_community_channel_ids
 from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize
 from core.gossip_report import generate_report_html
 
 bp = Blueprint("gossip", __name__)
+
+# Anthropic pricing: model-prefix → (input $/MTok, output $/MTok)
+_PRICING = {
+    "claude-haiku-4-5":  (0.80,  4.00),
+    "claude-haiku-3-5":  (0.80,  4.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-4-5": (3.00, 15.00),
+    "claude-opus-4-6":   (15.00, 75.00),
+    "claude-opus-4-5":   (15.00, 75.00),
+}
+_DEFAULT_BUFFER = 120_000
+_SYSTEM_PROMPT_TOKENS = 900   # rough size of extract_gossip_batch.txt
+_OUTPUT_TOKENS_PER_VIDEO = 300
+
+
+def _calc_cost(video_count: int, total_comment_chars: int,
+               model: str, buffer_chars: int) -> dict:
+    """Return cost estimate dict for a summarize run."""
+    if video_count == 0:
+        return {"videos": 0, "cost": 0.0, "model": model}
+    in_price, out_price = next(
+        (v for k, v in _PRICING.items() if model.startswith(k)),
+        (3.00, 15.00),  # fallback: Sonnet price
+    )
+    # Estimate number of LLM batches (each batch ≤ buffer_chars of comment text)
+    num_batches = max(1, math.ceil(total_comment_chars / buffer_chars))
+    input_tokens  = total_comment_chars // 4 + num_batches * _SYSTEM_PROMPT_TOKENS + video_count * 50
+    output_tokens = video_count * _OUTPUT_TOKENS_PER_VIDEO
+    cost = (input_tokens / 1_000_000 * in_price) + (output_tokens / 1_000_000 * out_price)
+    # Pretty model label: "claude-haiku-4-5" → "Haiku 4.5"
+    label = model.replace("claude-", "").replace("-", " ").title()
+    return {"videos": video_count, "cost": cost, "model": label}
+
+
+def _get_cost_estimates(conn, community_id: int) -> dict | None:
+    """
+    Return cost estimates for incremental and force summarize runs,
+    or None if the summarize backend is not anthropic.
+    """
+    settings = get_all_settings(conn)
+    if settings.get("llm_summarize_backend", "ollama") != "anthropic":
+        return None
+
+    model = settings.get("llm_summarize_anthropic_model", "claude-haiku-4-5")
+    buffer_chars = int(settings.get("llm_summarize_buffer_chars", str(_DEFAULT_BUFFER)))
+    channel_ids = get_community_channel_ids(conn, community_id)
+    if not channel_ids:
+        return None
+
+    ph = ",".join("?" * len(channel_ids))
+
+    pending = conn.execute(f"""
+        SELECT COUNT(DISTINCT v.video_id) AS cnt,
+               COALESCE(SUM(LENGTH(c.text)), 0) AS chars
+        FROM videos v
+        JOIN comments c ON v.video_id = c.video_id
+        LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
+        WHERE v.channel_id IN ({ph})
+          AND (vs.video_id IS NULL
+               OR vs.last_comment_published_at IS NULL
+               OR EXISTS (
+                   SELECT 1 FROM comments c2
+                   WHERE c2.video_id = v.video_id
+                     AND c2.published_at > vs.last_comment_published_at))
+    """, channel_ids).fetchone()
+
+    total = conn.execute(f"""
+        SELECT COUNT(DISTINCT v.video_id) AS cnt,
+               COALESCE(SUM(LENGTH(c.text)), 0) AS chars
+        FROM videos v
+        JOIN comments c ON v.video_id = c.video_id
+        WHERE v.channel_id IN ({ph})
+    """, channel_ids).fetchone()
+
+    return {
+        "incremental": _calc_cost(pending["cnt"], pending["chars"], model, buffer_chars),
+        "force":       _calc_cost(total["cnt"],   total["chars"],   model, buffer_chars),
+    }
 
 
 @bp.route("/<int:community_id>")
@@ -47,6 +126,7 @@ def runs(community_id):
         LIMIT 20
     """, (community_id,)).fetchall()
 
+    cost_estimates = _get_cost_estimates(conn, community_id)
     conn.close()
     return render_template(
         "gossip_runs.html",
@@ -54,6 +134,7 @@ def runs(community_id):
         active_run=dict(active_run) if active_run else None,
         queued_runs=[dict(r) for r in queued_runs],
         history=[dict(r) for r in history],
+        cost_estimates=cost_estimates,
     )
 
 
