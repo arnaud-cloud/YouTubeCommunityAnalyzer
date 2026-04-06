@@ -155,3 +155,12 @@ def collect_now(community_id):
     t.start()
     flash("Tracker collection started in background.", "success")
     return redirect(url_for("tracker.dashboard", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/clear-status", methods=["POST"])
+def clear_status(community_id):
+    """Dismiss the last collection status banner."""
+    conn = get_db(current_app.config["DB_PATH"])
+    set_setting(conn, f"tracker_collect_status_{community_id}", "")
+    conn.close()
+    return redirect(url_for("tracker.dashboard", community_id=community_id))
