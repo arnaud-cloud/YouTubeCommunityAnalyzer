@@ -303,11 +303,16 @@ function renderDashboard(channelFilter) {
         firstTileLabel.textContent = 'Avg Views / Video';
     }
 
-    // Channel Age tile
+    // Channel Age tile — based on oldest video, not channel creation date
     const now = new Date();
-    const agePubs = channels
-        .map(c => c.published_at ? new Date(c.published_at) : null)
-        .filter(Boolean);
+    const oldestByChannel = {};
+    for (const v of videos) {
+        if (!v.published_at) continue;
+        const d = new Date(v.published_at);
+        if (!oldestByChannel[v.channel_id] || d < oldestByChannel[v.channel_id])
+            oldestByChannel[v.channel_id] = d;
+    }
+    const agePubs = Object.values(oldestByChannel);
     if (agePubs.length) {
         const avgAgeMs = agePubs.reduce((sum, d) => sum + (now - d), 0) / agePubs.length;
         const totalMonths = Math.floor(avgAgeMs / (1000 * 60 * 60 * 24 * 30.44));
