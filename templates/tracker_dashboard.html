@@ -7,16 +7,25 @@
 
 {% block sidebar %}
 <div class="sidebar-section">
-    <h3>{{ community.name }}</h3>
+    <div class="sidebar-section-header">
+        <h3>{{ community.name }}</h3>
+        <div class="sidebar-sel-actions" id="sidebarSelActions">
+            <button id="sidebarSelAll" class="btn-sel-sm">All</button>
+            <button id="sidebarSelNone" class="btn-sel-sm">None</button>
+        </div>
+    </div>
     <ul class="channel-list">
+        <li><a href="#" class="channel-link active" data-channel="all">All Channels</a></li>
         {% for ch in channels %}
-        <li>
+        <li class="channel-list-item">
+            <input type="checkbox" class="sidebar-ch-cb growth-ch-cb"
+                   value="{{ ch.channel_id }}"
+                   data-channel="{{ ch.channel_id }}" checked>
             <a href="#" class="channel-link" data-channel="{{ ch.channel_id }}">
                 {{ ch.channel_name }}
             </a>
         </li>
         {% endfor %}
-        <li><a href="#" class="channel-link active" data-channel="all">All Channels</a></li>
     </ul>
 </div>
 {% endblock %}
@@ -39,13 +48,6 @@
     <div class="stat-tile"><span class="stat-value" id="tile-videos">-</span><span class="stat-label">Total Videos</span></div>
 </div>
 
-<div class="channel-selector-panel">
-    <div class="channel-selector-actions">
-        <button id="growthSelAll" class="btn-sel">All</button>
-        <button id="growthSelNone" class="btn-sel">None</button>
-    </div>
-    <div id="growthChannelCheckboxes" class="channel-checkboxes"></div>
-</div>
 
 <div class="chart-row">
     <div class="chart-container half">
@@ -170,26 +172,26 @@ async function loadData() {
 }
 
 function buildGrowthSelector(channels) {
-    const container = document.getElementById('growthChannelCheckboxes');
-    container.innerHTML = '';
+    // Apply channel colors to sidebar checkboxes
     channels.forEach(c => {
+        const cb = document.querySelector(`.sidebar-ch-cb[data-channel="${c.channel_id}"]`);
+        if (!cb) return;
         const color = channelColorMap[c.channel_id] || '#aaa';
-        const label = document.createElement('label');
-        label.className = 'channel-checkbox-label';
-        label.innerHTML = `
-            <input type="checkbox" class="growth-ch-cb" value="${c.channel_id}" checked>
-            <span class="ch-color-dot" style="background:${color}"></span>
-            ${c.channel_name}`;
-        container.appendChild(label);
+        cb.style.borderColor = color;
+        cb.style.accentColor = color;
+        // Show the color via border when checked
+        cb.addEventListener('change', () => {
+            cb.style.borderColor = color;
+            refreshGrowthCharts();
+        });
     });
-    container.querySelectorAll('.growth-ch-cb').forEach(cb =>
-        cb.addEventListener('change', refreshGrowthCharts));
-    document.getElementById('growthSelAll').addEventListener('click', () => {
-        container.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = true);
+
+    document.getElementById('sidebarSelAll').addEventListener('click', () => {
+        document.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = true);
         refreshGrowthCharts();
     });
-    document.getElementById('growthSelNone').addEventListener('click', () => {
-        container.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = false);
+    document.getElementById('sidebarSelNone').addEventListener('click', () => {
+        document.querySelectorAll('.growth-ch-cb').forEach(cb => cb.checked = false);
         refreshGrowthCharts();
     });
 }
@@ -260,9 +262,12 @@ function renderDashboard(channelFilter) {
     // Growth charts (delegated to refreshGrowthCharts so selector is respected)
     refreshGrowthCharts();
 
-    // Channel selector + channels tile — only meaningful with all channels
+    // Sidebar selector controls + channels tile — only meaningful with all channels
     const isAll = channelFilter === 'all';
-    document.querySelector('.channel-selector-panel').style.display = isAll ? '' : 'none';
+    document.getElementById('sidebarSelActions').style.display = isAll ? '' : 'none';
+    document.querySelectorAll('.sidebar-ch-cb').forEach(cb => {
+        cb.style.display = isAll ? '' : 'none';
+    });
 
     // Growth leaders + ranking panels — only meaningful with multiple channels
     const rankingRow = document.getElementById('rankingRow');
