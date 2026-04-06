@@ -10,7 +10,7 @@
 <div class="section">
     <h2>Run Gossip Pipeline</h2>
     {% if active_run %}
-    <div class="run-card active" id="active-run" data-run-id="{{ active_run.id }}">
+    <div class="run-card active" id="active-run" data-run-id="{{ active_run.id }}" data-step="{{ active_run.current_step }}">
         <div class="run-status">
             <span class="status-badge status-{{ active_run.status }}">{{ active_run.status }}</span>
             <span class="run-detail" id="run-detail">{{ active_run.progress_detail }}</span>
@@ -19,6 +19,16 @@
             <div class="progress-fill" id="progress-fill"></div>
         </div>
         <p class="muted">Started: {{ active_run.started_at }}</p>
+        {% if active_run.current_step in ('', 'pending', 'collecting') %}
+        <div style="margin-top:1rem;display:flex;gap:1rem">
+            <form method="POST" action="{{ url_for('gossip.start_local', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Queue: Run Local Steps</button>
+            </form>
+            <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
+                <button type="submit" class="btn btn-sm">Queue: Run Full Analysis</button>
+            </form>
+        </div>
+        {% endif %}
         <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
     </div>
     {% else %}
