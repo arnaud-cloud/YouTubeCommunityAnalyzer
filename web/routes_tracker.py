@@ -31,11 +31,16 @@ def dashboard(community_id):
         ORDER BY ch.channel_name
     """, (community_id,)).fetchall()
 
+    all_communities = conn.execute(
+        "SELECT id, name FROM communities ORDER BY name"
+    ).fetchall()
+
     conn.close()
     return render_template(
         "tracker_dashboard.html",
         community=dict(community),
         channels=[dict(c) for c in channels],
+        all_communities=[dict(c) for c in all_communities],
     )
 
 

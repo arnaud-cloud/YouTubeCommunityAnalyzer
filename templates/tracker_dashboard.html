@@ -8,7 +8,21 @@
 {% block sidebar %}
 <div class="sidebar-section">
     <div class="sidebar-section-header">
-        <h3>{{ community.name }}</h3>
+        <div class="community-switcher">
+            <button class="community-switcher-btn" id="communitySwitcherBtn">
+                {{ community.name }} <span class="switcher-caret">▾</span>
+            </button>
+            <ul class="community-dropdown" id="communityDropdown">
+                {% for c in all_communities %}
+                <li>
+                    <a href="{{ url_for('tracker.dashboard', community_id=c.id) }}"
+                       class="{% if c.id == community.id %}active{% endif %}">
+                        {{ c.name }}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         <div class="sidebar-sel-actions" id="sidebarSelActions">
             <button id="sidebarSelAll" class="btn-sel-sm">All</button>
             <button id="sidebarSelNone" class="btn-sel-sm">None</button>
@@ -28,6 +42,16 @@
         {% endfor %}
     </ul>
 </div>
+
+<script>
+const btn = document.getElementById('communitySwitcherBtn');
+const dropdown = document.getElementById('communityDropdown');
+btn.addEventListener('click', e => {
+    e.stopPropagation();
+    dropdown.classList.toggle('open');
+});
+document.addEventListener('click', () => dropdown.classList.remove('open'));
+</script>
 {% endblock %}
 
 {% block content %}
