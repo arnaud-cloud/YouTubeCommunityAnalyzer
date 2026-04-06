@@ -118,7 +118,7 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
             <canvas id="glSubsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
-            <h2>Engagement Rate Change (pp)</h2>
+            <h2>Engagement Rate (%)</h2>
             <canvas id="glEngChart" height="220"></canvas>
         </div>
     </div>
@@ -128,7 +128,7 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
             <canvas id="glVpsChart" height="220"></canvas>
         </div>
         <div class="chart-container half">
-            <h2>Comment Rate Change (pp)</h2>
+            <h2>Comment Rate (%)</h2>
             <canvas id="glCommentChart" height="220"></canvas>
         </div>
     </div>
@@ -452,15 +452,10 @@ function renderGrowthLeaders() {
         const vFirst = vidMap[cid + '|' + first.snapshot_date];
         const vLast  = vidMap[cid + '|' + last.snapshot_date];
 
-        const engFirst      = vFirst && vFirst.views ? vFirst.likes    / vFirst.views * 100 : null;
-        const engLast       = vLast  && vLast.views  ? vLast.likes     / vLast.views  * 100 : null;
-        const engChange     = engFirst !== null && engLast !== null ? engLast - engFirst : null;
+        const engRate     = vLast && vLast.views ? vLast.likes    / vLast.views * 100 : null;
+        const commentRate = vLast && vLast.views ? vLast.comments / vLast.views * 100 : null;
 
-        const comFirst      = vFirst && vFirst.views ? vFirst.comments / vFirst.views * 100 : null;
-        const comLast       = vLast  && vLast.views  ? vLast.comments  / vLast.views  * 100 : null;
-        const commentChange = comFirst !== null && comLast !== null ? comLast - comFirst : null;
-
-        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, vps, engChange, commentChange});
+        stats.push({cid, viewGrowth, subGrowth, avgViewsGrowth, vps, engRate, commentRate});
     }
 
     const renderLeader = (canvasId, key, label) => {
@@ -475,9 +470,9 @@ function renderGrowthLeaders() {
     renderLeader('glViewsChart',    'viewGrowth',     'Views Growth %');
     renderLeader('glAvgViewsChart', 'avgViewsGrowth', 'Avg Views/Video %');
     renderLeader('glSubsChart',     'subGrowth',      'Subscriber Growth %');
-    renderLeader('glEngChart',      'engChange',      'Engagement Δ pp');
+    renderLeader('glEngChart',      'engRate',        'Engagement Rate (%)');
     renderLeader('glVpsChart',      'vps',            'Views per Subscriber');
-    renderLeader('glCommentChart',  'commentChange',  'Comment Rate Δ pp');
+    renderLeader('glCommentChart',  'commentRate',    'Comment Rate (%)');
 }
 
 function renderHBarChart(canvasId, labels, data, label, labelFontSize = 10, colorKeys = null) {
