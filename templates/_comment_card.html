@@ -1,0 +1,11 @@
+<div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.9rem 1rem;margin-bottom:.6rem">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.5rem;margin-bottom:.4rem">
+        <span style="font-weight:600;font-size:.88rem;color:var(--text)">{{ c.author_name or 'Unknown' }}</span>
+        <div style="display:flex;gap:1rem;font-size:.78rem;color:var(--muted)">
+            {% if c.ch_name %}<span>{{ c.ch_name }}</span>{% endif %}
+            {% if c.published_at %}<span>{{ c.published_at[:10] }}</span>{% endif %}
+            {% if c.like_count %}<span>♥ {{ c.like_count }}</span>{% endif %}
+        </div>
+    </div>
+    <p style="font-size:.9rem;line-height:1.55;color:var(--text)" class="comment-text">{{ c.text or '' }}</p>
+</div>

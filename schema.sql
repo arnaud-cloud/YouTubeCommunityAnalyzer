@@ -184,6 +184,28 @@ CREATE TABLE IF NOT EXISTS gossip_runs (
     FOREIGN KEY (analysis_id) REFERENCES analysis_results(id)
 );
 
+-- ═══ GOSSIP THEMES ════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS themes (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    community_id    INTEGER NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT,
+    gossip_type     TEXT,
+    subjects        TEXT NOT NULL DEFAULT '[]',
+    gossip_item_ids TEXT NOT NULL DEFAULT '[]',
+    first_seen_at   TEXT,
+    last_seen_at    TEXT,
+    activity_json   TEXT DEFAULT '{}',
+    total_evidence  INTEGER DEFAULT 0,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    llm_backend     TEXT,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_themes_community  ON themes(community_id);
+CREATE INDEX IF NOT EXISTS idx_themes_last_seen  ON themes(last_seen_at);
+
 -- ═══ SETTINGS ═════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS settings (

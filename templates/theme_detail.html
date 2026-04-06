@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}{{ theme.title }} — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header" style="align-items:flex-start">
+    <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.5rem;flex-wrap:wrap">
+            <a href="{{ url_for('themes.browse', community_id=theme.community_id) }}" class="btn btn-outline btn-sm">← All Themes</a>
+            <span style="font-size:.78rem;font-weight:bold;text-transform:uppercase;
+                         color:{{ type_color }};background:{{ type_color }}22;
+                         border:1px solid {{ type_color }}44;
+                         border-radius:12px;padding:.2rem .7rem">
+                {{ theme.gossip_type or 'unknown' }}
+            </span>
+        </div>
+        <h1 style="font-size:1.6rem;line-height:1.25;margin-bottom:.5rem">{{ theme.title }}</h1>
+        {% if theme.description %}
+        <p style="color:var(--muted);font-size:.95rem;max-width:720px;line-height:1.6">{{ theme.description }}</p>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Subject pills ─────────────────────────────────────────────────────── #}
+{% if theme.subjects %}
+<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.5rem">
+    {% for s in theme.subjects %}
+    <span style="background:var(--surface);border:1px solid var(--border);border-radius:16px;
+                 padding:.25rem .75rem;font-size:.85rem;color:var(--text)">{{ s }}</span>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Stats row ─────────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:2rem">
+    {% if theme.first_seen_at %}
+    <div class="stat-tile" style="text-align:left;padding:.75rem 1.25rem;min-width:140px">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">First seen</div>
+        <div style="font-size:1.1rem;font-weight:bold;color:var(--text)">{{ theme.first_seen_at[:7] }}</div>
+    </div>
+    {% endif %}
+    {% if theme.last_seen_at %}
+    <div class="stat-tile" style="text-align:left;padding:.75rem 1.25rem;min-width:140px">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Last seen</div>
+        <div style="font-size:1.1rem;font-weight:bold;color:var(--accent)">{{ theme.last_seen_at[:7] }}</div>
+    </div>
+    {% endif %}
+    <div class="stat-tile" style="text-align:left;padding:.75rem 1.25rem;min-width:140px">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Evidence comments</div>
+        <div style="font-size:1.1rem;font-weight:bold;color:var(--text)">{{ theme.all_comments_count }}</div>
+    </div>
+    <div class="stat-tile" style="text-align:left;padding:.75rem 1.25rem;min-width:140px">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Gossip items</div>
+        <div style="font-size:1.1rem;font-weight:bold;color:var(--text)">{{ theme.gossip_items | length }}</div>
+    </div>
+    {% if theme.channels_involved %}
+    <div class="stat-tile" style="text-align:left;padding:.75rem 1.25rem;min-width:160px">
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Channels</div>
+        <div style="font-size:.85rem;color:var(--text)">{{ theme.channels_involved | join(', ') }}</div>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Activity timeline chart ───────────────────────────────────────────── #}
+{% if chart_svg %}
+<div class="section">
+    <h2>Activity Over Time</h2>
+    <div class="chart-container" style="overflow-x:auto;padding:1rem">
+        {{ chart_svg | safe }}
+    </div>
+</div>
+{% endif %}
+
+{# ── Origin Story ──────────────────────────────────────────────────────── #}
+{% if theme.origin_comments %}
+<div class="section">
+    <h2>Origin Story</h2>
+    <p class="muted" style="margin-bottom:1rem;font-size:.85rem">The earliest comments that first surfaced this theme.</p>
+    {% for c in theme.origin_comments %}
+    {% include "_comment_card.html" %}
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Recent Activity ───────────────────────────────────────────────────── #}
+{% if theme.recent_comments and theme.all_comments_count > 5 %}
+<div class="section">
+    <h2>Recent Activity</h2>
+    <p class="muted" style="margin-bottom:1rem;font-size:.85rem">The most recent comments still discussing this theme.</p>
+    {% for c in theme.recent_comments %}
+    {% include "_comment_card.html" %}
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Full Timeline ─────────────────────────────────────────────────────── #}
+{% if theme.timeline %}
+<div class="section">
+    <h2>
+        Full Timeline
+        <button onclick="document.getElementById('full-timeline').classList.toggle('hidden')"
+                class="btn btn-outline btn-sm" style="margin-left:1rem;font-size:.8rem">
+            Toggle
+        </button>
+    </h2>
+    <div id="full-timeline" class="hidden">
+        {% for month, items in theme.timeline.items() %}
+        <div style="margin-bottom:1.5rem">
+            <div style="font-size:.8rem;font-weight:bold;text-transform:uppercase;
+                        letter-spacing:.06em;color:var(--muted);margin-bottom:.6rem;
+                        border-bottom:1px solid var(--border);padding-bottom:.3rem">
+                {{ month }}
+            </div>
+            {% for gi in items %}
+            <div style="background:var(--surface);border:1px solid var(--border);
+                        border-left:3px solid {{ type_color }};border-radius:6px;
+                        padding:.75rem 1rem;margin-bottom:.6rem">
+                <div style="font-size:.8rem;color:var(--muted);margin-bottom:.3rem">
+                    {{ gi.channel_name }} · <em>{{ gi.video_title[:60] }}</em>
+                    {% if gi.confidence %}
+                    · <span style="text-transform:uppercase;font-size:.72rem;
+                        color:{% if gi.confidence == 'high' %}#2ecc71{% elif gi.confidence == 'medium' %}#f39c12{% else %}#9090b0{% endif %}">
+                        {{ gi.confidence }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if gi.claim %}
+                <p style="color:var(--text);font-size:.88rem;line-height:1.5">{{ gi.claim }}</p>
+                {% endif %}
+                {% if gi.evidence_ids %}
+                <div style="margin-top:.5rem;display:flex;flex-wrap:wrap;gap:.4rem">
+                    {% for cid in gi.evidence_ids[:3] %}
+                    {% if cid in theme.comments_by_id %}
+                    {% set ec = theme.comments_by_id[cid] %}
+                    <span style="background:var(--bg);border:1px solid var(--border);
+                                 border-radius:4px;padding:.2rem .5rem;font-size:.78rem;
+                                 color:var(--muted)" title="{{ ec.text[:200] }}">
+                        {{ ec.author_name[:20] }}: "{{ ec.text[:60] }}…"
+                    </span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+.hidden { display: none !important; }
+</style>
+{% endblock %}

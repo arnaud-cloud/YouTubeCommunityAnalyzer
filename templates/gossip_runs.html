@@ -4,7 +4,10 @@
 {% block content %}
 <div class="page-header">
     <h1>{{ community.name }} — Gossip Analysis</h1>
-    <a href="{{ url_for('community.edit', community_id=community.id) }}" class="btn btn-outline">Edit Community</a>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+        <a href="{{ url_for('themes.browse', community_id=community.id) }}" class="btn btn-outline">View Themes</a>
+        <a href="{{ url_for('community.edit', community_id=community.id) }}" class="btn btn-outline">Edit Community</a>
+    </div>
 </div>
 
 <div class="section">

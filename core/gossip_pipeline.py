@@ -10,6 +10,7 @@ import logging
 
 from .db import get_db, get_all_settings
 from . import gossip_collect, gossip_summarize, gossip_aggregate, gossip_analyze, gossip_report
+from . import gossip_themes
 
 log = logging.getLogger(__name__)
 
@@ -210,6 +211,12 @@ def run_local_steps(db_path: str, community_id: int, run_id: int):
         _complete_run(conn, run_id, analysis_id)
         log.info(f"[Run {run_id}] Local pipeline complete. Analysis ID: {analysis_id}")
 
+        try:
+            n = gossip_themes.compute_themes(conn, community_id, use_llm=False)
+            log.info(f"[Run {run_id}] Auto-computed {n} themes.")
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme auto-recompute failed (non-fatal): {te}")
+
     except Exception as e:
         log.error(f"[Run {run_id}] Local pipeline failed: {e}", exc_info=True)
         _fail_run(conn, run_id, str(e))
@@ -307,6 +314,13 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
 
         _complete_run(conn, run_id, analysis_id)
         log.info(f"[Run {run_id}] Pipeline complete. Analysis ID: {analysis_id}")
+
+        # Auto-recompute themes (rule-based, no LLM — fast)
+        try:
+            n = gossip_themes.compute_themes(conn, community_id, use_llm=False)
+            log.info(f"[Run {run_id}] Auto-computed {n} themes.")
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme auto-recompute failed (non-fatal): {te}")
 
     except Exception as e:
         log.error(f"[Run {run_id}] Pipeline failed: {e}", exc_info=True)

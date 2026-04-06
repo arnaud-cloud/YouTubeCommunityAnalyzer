@@ -38,11 +38,13 @@ def create_app(db_path=None):
     from .routes_tracker import bp as tracker_bp
     from .routes_gossip import bp as gossip_bp
     from .routes_settings import bp as settings_bp
+    from .routes_themes import bp as themes_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(community_bp, url_prefix="/community")
     app.register_blueprint(tracker_bp, url_prefix="/tracker")
     app.register_blueprint(gossip_bp, url_prefix="/gossip")
     app.register_blueprint(settings_bp, url_prefix="/settings")
+    app.register_blueprint(themes_bp, url_prefix="/themes")
 
     return app
