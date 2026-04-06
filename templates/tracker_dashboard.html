@@ -79,6 +79,7 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
     <strong style="color:#7dd3fc">Collection running in background…</strong>
     <span style="color:#94a3b8;font-size:.85rem">Started {{ collect_at }}</span>
 </div>
+<script>setTimeout(() => location.reload(), 5000);</script>
 {% endif %}
 <div class="page-header">
     <h1>{{ community.name }} — Tracker Dashboard</h1>
