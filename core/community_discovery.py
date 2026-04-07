@@ -246,7 +246,7 @@ def _llm_suggest(keywords: str, settings: dict) -> list[dict]:
     try:
         from .llm_client import LLMClient, _settings_to_llm_config
         cfg = _settings_to_llm_config(settings)
-        llm = LLMClient(cfg, role="analyze")
+        llm = LLMClient(cfg, role="discovery")
         system_prompt = _DISCOVER_PROMPT_PATH.read_text(encoding="utf-8")
         result = llm.complete_json(
             system_prompt,

@@ -33,6 +33,12 @@ def _settings_to_llm_config(settings: dict[str, str]) -> dict:
                 "ollama_model": settings.get("llm_analyze_ollama_model", "mistral-nemo:12b"),
                 "max_tokens": int(settings.get("llm_analyze_max_tokens", "16000")),
             },
+            "discovery": {
+                "backend": settings.get("llm_discovery_backend", "anthropic"),
+                "anthropic_model": settings.get("llm_discovery_anthropic_model", "claude-haiku-4-5"),
+                "ollama_model": settings.get("llm_discovery_ollama_model", "mistral-nemo:12b"),
+                "max_tokens": 1024,
+            },
         },
         "_env": {
             "youtube_api_key": settings.get("youtube_api_key", ""),
