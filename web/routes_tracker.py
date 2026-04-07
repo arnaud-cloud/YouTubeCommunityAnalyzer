@@ -39,6 +39,18 @@ def dashboard(community_id):
         "SELECT id, name FROM communities ORDER BY name"
     ).fetchall()
 
+    # Tone / credibility scores for channel owners (author_channel_id == channel_id)
+    channel_ids = [c["channel_id"] for c in channels]
+    tone_scores = {}
+    if channel_ids:
+        ph = ",".join("?" * len(channel_ids))
+        for row in conn.execute(
+            f"SELECT * FROM commenter_scores "
+            f"WHERE community_id = ? AND author_channel_id IN ({ph})",
+            [community_id] + channel_ids,
+        ).fetchall():
+            tone_scores[row["author_channel_id"]] = dict(row)
+
     collect_status = get_setting(conn, f"tracker_collect_status_{community_id}")
     collect_at = get_setting(conn, f"tracker_collect_at_{community_id}")
     conn.close()
@@ -49,6 +61,7 @@ def dashboard(community_id):
         all_communities=[dict(c) for c in all_communities],
         collect_status=collect_status,
         collect_at=collect_at,
+        tone_scores=tone_scores,
     )
 
 

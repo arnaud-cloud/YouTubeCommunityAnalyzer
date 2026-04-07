@@ -107,6 +107,8 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
 </div>
 
 
+<div id="tone-card" style="display:none;margin-bottom:1rem;background:var(--surface);border:1px solid #a8e6cf44;border-radius:8px;padding:1.1rem 1.25rem"></div>
+
 <div class="chart-row">
     <div class="chart-container half">
         <h2>Subscribers Over Time</h2>
@@ -215,6 +217,8 @@ document.addEventListener('click', () => dropdown.classList.remove('open'));
 {% block scripts %}
 <script>
 const COMMUNITY_ID = {{ community.id }};
+const TONE_SCORES = {{ tone_scores | tojson }};
+const GOSSIP_COMMENTER_URL = "{{ url_for('gossip.commenters', community_id=community.id) }}";
 const CHART_COLORS = [
     '#7c4dff','#2ecc71','#e74c3c','#f39c12','#3498db',
     '#e91e63','#00bcd4','#ff5722','#9c27b0','#4caf50',
@@ -367,6 +371,9 @@ function renderDashboard(channelFilter) {
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const recentVids = videos.filter(v => v.published_at && new Date(v.published_at) >= sixMonthsAgo);
     document.getElementById('tile-vpm').textContent = (recentVids.length / 6).toFixed(1);
+
+    // Tone card — only when a single channel is selected
+    renderToneCard(channelFilter);
 
     // Channel name lookup
     const cname = {};
@@ -605,6 +612,66 @@ function parseDuration(iso) {
     return (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
 }
 
+
+function renderToneCard(channelFilter) {
+    const card = document.getElementById('tone-card');
+    if (channelFilter === 'all' || !TONE_SCORES[channelFilter]) {
+        card.style.display = 'none';
+        card.innerHTML = '';
+        return;
+    }
+    const s = TONE_SCORES[channelFilter];
+    const tier = s.tier || '?';
+    const tierColors = {A:'#2ecc71', B:'#a8e6cf', C:'#f39c12', D:'#e74c3c'};
+    const tierColor = tierColors[tier] || '#aaa';
+    const pct = Math.round((s.quality_score || 0) * 100);
+
+    const bars = [
+        ['Engagement',    Math.round((s.avg_engagement_norm || 0) * 100)],
+        ['Channel spread',Math.round((s.channel_spread_score || 0) * 100)],
+        ['Like ratio',    Math.round((s.like_ratio_score || 0) * 100)],
+        ['Factual anchors',Math.round((s.factual_anchor_score || 0) * 100)],
+        ['Avg length',    Math.round((s.avg_length_score || 0) * 100)],
+    ];
+    const contentLabel = s.llm_tone_score !== null && s.llm_tone_score !== undefined
+        ? ['LLM Tone', Math.round((s.llm_tone_score || 0) * 100), '#a8e6cf']
+        : ['Vocab richness', Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'];
+    bars.push([contentLabel[0], contentLabel[1], contentLabel[2]]);
+
+    const barsHtml = bars.map(([label, val, color]) => `
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
+            <span style="width:110px;font-size:.78rem;color:${color || 'var(--muted)'}">${label}</span>
+            <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+                <div style="width:${val}%;height:100%;background:${color || 'var(--accent)'};border-radius:3px"></div>
+            </div>
+            <span style="width:30px;text-align:right;font-size:.78rem">${val}%</span>
+        </div>`).join('');
+
+    const toneReason = s.llm_tone_reason
+        ? `<div style="margin-top:.6rem;font-size:.88rem;line-height:1.5;color:var(--text)">${s.llm_tone_reason}</div>`
+        : '';
+    const toneModel = s.llm_tone_backend
+        ? `<span style="color:var(--muted);font-size:.75rem;margin-left:.5rem">${s.llm_tone_backend} / ${s.llm_tone_model || ''}</span>`
+        : '';
+    const commenterLink = `<a href="${GOSSIP_COMMENTER_URL}?tier=&sort=quality_score" style="font-size:.78rem;color:var(--muted);margin-left:auto;text-decoration:none;border:1px solid var(--border);border-radius:4px;padding:.15em .5em" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">View all commenters →</a>`;
+
+    card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
+            <div style="font-size:.85rem;font-weight:600;color:#a8e6cf">🎭 Commenter Credibility</div>
+            <span style="font-size:.82rem;font-weight:700;background:${tierColor}22;color:${tierColor};border:1px solid ${tierColor}44;border-radius:4px;padding:.15em .5em">Tier ${tier} · ${pct}%</span>
+            <span style="font-size:.78rem;color:var(--muted)">${s.comment_count || 0} comments · ${s.channel_count || 0} channels</span>
+            ${toneModel}
+            ${commenterLink}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem">
+            <div>${barsHtml}</div>
+            <div style="font-size:.82rem;color:var(--muted)">
+                ${s.llm_tone_reason ? '<div style="font-size:.8rem;font-weight:600;color:#a8e6cf;margin-bottom:.3rem">LLM Assessment</div>' : ''}
+                ${toneReason || '<span style="color:var(--muted)">No LLM tone analysis yet. Run <strong>LLM Tone Score</strong> in the Commenters panel.</span>'}
+            </div>
+        </div>`;
+    card.style.display = '';
+}
 
 // Growth leaders top N dropdown
 document.getElementById('growthLeadersTopN').addEventListener('change', renderGrowthLeaders);
