@@ -6,7 +6,7 @@ import threading
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
 from core.db import get_db, get_all_settings, get_community_channel_ids
-from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize, run_reanalyze
+from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize, run_reanalyze, run_resummarize_all
 from core.gossip_report import generate_report_html
 from core.executive_summary import (
     generate_executive_summary, generate_top_insights,
@@ -94,6 +94,105 @@ def _get_cost_estimates(conn, community_id: int) -> dict | None:
     }
 
 
+def _get_pipeline_status(conn, community_id: int) -> dict:
+    """Compute staleness state for each pipeline step."""
+    channel_ids = get_community_channel_ids(conn, community_id)
+    never = {"state": "never", "timestamp": None, "detail": ""}
+    if not channel_ids:
+        return {k: never for k in
+                ("collect", "summarize", "aggregate", "analyze", "report", "themes", "exec_reports")}
+
+    ph = ",".join("?" * len(channel_ids))
+
+    def q1(sql, params=()):
+        r = conn.execute(sql, params).fetchone()
+        return r[0] if r else None
+
+    last_collect   = q1(f"SELECT MAX(collected_at) FROM comments WHERE channel_id IN ({ph})", channel_ids)
+    last_summarize = q1(f"SELECT MAX(processed_at) FROM video_summaries WHERE channel_id IN ({ph})", channel_ids)
+    last_aggregate = q1("SELECT MAX(created_at) FROM aggregation_results WHERE community_id = ?", (community_id,))
+    last_analyze   = q1("SELECT MAX(created_at) FROM analysis_results WHERE community_id = ?", (community_id,))
+    last_themes    = q1("SELECT MAX(created_at) FROM themes WHERE community_id = ?", (community_id,))
+    last_exec      = q1("SELECT MAX(created_at) FROM executive_reports WHERE community_id = ?", (community_id,))
+
+    pending_summaries = q1(f"""
+        SELECT COUNT(DISTINCT v.video_id)
+        FROM videos v
+        JOIN comments c ON v.video_id = c.video_id
+        LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
+        WHERE v.channel_id IN ({ph})
+          AND (vs.video_id IS NULL
+               OR vs.last_comment_published_at IS NULL
+               OR EXISTS (
+                   SELECT 1 FROM comments c2
+                   WHERE c2.video_id = v.video_id
+                     AND c2.published_at > vs.last_comment_published_at))
+    """, channel_ids) or 0
+
+    def _state(ts, stale=False):
+        if not ts:
+            return "never"
+        return "stale" if stale else "fresh"
+
+    def _gt(a, b):
+        """True if both non-null and a > b."""
+        return bool(a and b and a > b)
+
+    summarize_stale  = pending_summaries > 0
+    aggregate_stale  = _gt(last_summarize, last_aggregate)
+    analyze_stale    = _gt(last_aggregate, last_analyze)
+    themes_stale     = _gt(last_summarize, last_themes)
+    exec_stale       = (_gt(last_themes, last_exec) or _gt(last_analyze, last_exec)
+                        or _gt(last_aggregate, last_exec))
+
+    return {
+        "collect":      {"state": _state(last_collect),                          "timestamp": last_collect,   "detail": ""},
+        "summarize":    {"state": _state(last_summarize, summarize_stale),        "timestamp": last_summarize, "detail": f"{pending_summaries} pending" if pending_summaries else ""},
+        "aggregate":    {"state": _state(last_aggregate, aggregate_stale),        "timestamp": last_aggregate, "detail": ""},
+        "analyze":      {"state": _state(last_analyze,   analyze_stale),          "timestamp": last_analyze,   "detail": ""},
+        "report":       {"state": _state(last_analyze,   analyze_stale),          "timestamp": last_analyze,   "detail": ""},
+        "themes":       {"state": _state(last_themes,    themes_stale),           "timestamp": last_themes,    "detail": ""},
+        "exec_reports": {"state": _state(last_exec,      exec_stale),             "timestamp": last_exec,      "detail": ""},
+    }
+
+
+def _get_preset_availability(conn, community_id: int, cost_estimates) -> dict:
+    """Return enabled/disabled state and cost hints for each preset card."""
+    channel_ids = get_community_channel_ids(conn, community_id)
+    has_channels = len(channel_ids) > 0
+
+    has_summaries = False
+    if has_channels:
+        ph = ",".join("?" * len(channel_ids))
+        has_summaries = conn.execute(
+            f"SELECT COUNT(*) FROM video_summaries WHERE channel_id IN ({ph})",
+            channel_ids,
+        ).fetchone()[0] > 0
+
+    return {
+        "collect": {
+            "enabled": has_channels,
+            "reason": None if has_channels else "No channels in community",
+            "cost": None,
+        },
+        "full_pipeline": {
+            "enabled": has_channels,
+            "reason": None if has_channels else "No channels in community",
+            "cost": cost_estimates["incremental"] if cost_estimates else None,
+        },
+        "reanalyze": {
+            "enabled": has_summaries,
+            "reason": None if has_summaries else "No summaries yet — run Full Pipeline first",
+            "cost": None,
+        },
+        "resummarize_all": {
+            "enabled": has_channels,
+            "reason": None if has_channels else "No channels in community",
+            "cost": cost_estimates["force"] if cost_estimates else None,
+        },
+    }
+
+
 @bp.route("/<int:community_id>")
 def runs(community_id):
     conn = get_db(current_app.config["DB_PATH"])
@@ -130,7 +229,9 @@ def runs(community_id):
         LIMIT 20
     """, (community_id,)).fetchall()
 
-    cost_estimates = _get_cost_estimates(conn, community_id)
+    cost_estimates  = _get_cost_estimates(conn, community_id)
+    pipeline_status = _get_pipeline_status(conn, community_id)
+    presets         = _get_preset_availability(conn, community_id, cost_estimates)
     conn.close()
     return render_template(
         "gossip_runs.html",
@@ -139,6 +240,8 @@ def runs(community_id):
         queued_runs=[dict(r) for r in queued_runs],
         history=[dict(r) for r in history],
         cost_estimates=cost_estimates,
+        pipeline_status=pipeline_status,
+        presets=presets,
     )
 
 
@@ -302,6 +405,35 @@ def start_reanalyze(community_id):
     )
     t.start()
     flash("Re-analyze started — aggregate + analyze + report (no collect/summarize).", "success")
+    return redirect(url_for("gossip.runs", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/resummarize-all", methods=["POST"])
+def start_resummarize_all(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    active = conn.execute(
+        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active:
+        conn.close()
+        flash("A pipeline is already running for this community.", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(
+        target=run_resummarize_all, args=(db_path, community_id, run_id), daemon=True
+    )
+    t.start()
+    flash("Re-summarize All started — all videos will be reprocessed from scratch.", "success")
     return redirect(url_for("gossip.runs", community_id=community_id))
 
 

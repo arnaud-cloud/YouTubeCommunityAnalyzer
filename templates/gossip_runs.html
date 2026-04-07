@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ community.name }} Gossip — Community Analyzer{% endblock %}
+{% block title %}{{ community.name }} — Pipeline — Community Analyzer{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>{{ community.name }} — Gossip Analysis</h1>
+    <h1>{{ community.name }} — Gossip Pipeline</h1>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
         <a href="{{ url_for('themes.browse', community_id=community.id) }}" class="btn btn-outline">View Themes</a>
         <a href="{{ url_for('gossip.executive_summary', community_id=community.id) }}" class="btn btn-outline">Executive Summary</a>
@@ -12,12 +12,12 @@
     </div>
 </div>
 
+{# ── Active run ─────────────────────────────────────────────────────────── #}
+{% if active_run %}
 <div class="section">
-    <h2>Run Gossip Pipeline</h2>
-    {% if active_run %}
     <div class="run-card active" id="active-run" data-run-id="{{ active_run.id }}" data-step="{{ active_run.current_step }}">
         <div class="run-status">
-            <span class="status-badge status-{{ active_run.status }}">{{ active_run.status }}</span>
+            <span class="status-badge status-{{ active_run.status }}" id="run-badge">{{ active_run.status }}</span>
             <span class="run-detail" id="run-detail">{{ active_run.progress_detail }}</span>
         </div>
         <div class="progress-bar">
@@ -32,17 +32,7 @@
                 <div id="quota-fill" style="height:100%;background:#fb923c;width:0%;transition:width .4s ease"></div>
             </div>
         </div>
-        <p class="muted">Started: {{ active_run.started_at }}</p>
-        {% if active_run.current_step in ('', 'collecting') and not queued_runs %}
-        <div style="margin-top:1rem;display:flex;gap:1rem">
-            <form method="POST" action="{{ url_for('gossip.start_local', community_id=community.id) }}">
-                <button type="submit" class="btn btn-outline btn-sm">Queue: Run Local Steps</button>
-            </form>
-            <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
-                <button type="submit" class="btn btn-sm">Queue: Run Full Analysis</button>
-            </form>
-        </div>
-        {% endif %}
+        <p class="muted" style="margin-top:.5rem">Started: {{ active_run.started_at }}</p>
         <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
     </div>
     {% for qr in queued_runs %}
@@ -50,50 +40,211 @@
         ⏳ Run #{{ qr.id }} queued — waiting for current run to finish
     </div>
     {% endfor %}
-    {% elif queued_runs %}
+</div>
+{% elif queued_runs %}
+<div class="section">
     {% for qr in queued_runs %}
     <div class="run-card active" id="active-run" data-run-id="{{ qr.id }}" data-step="pending">
         <div class="run-status">
-            <span class="status-badge status-pending">pending</span>
+            <span class="status-badge status-pending" id="run-badge">pending</span>
             <span class="run-detail" id="run-detail">Waiting to start...</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-        <p class="muted">Queued: {{ qr.started_at }}</p>
+        <p class="muted" style="margin-top:.5rem">Queued: {{ qr.started_at }}</p>
         <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
     </div>
     {% endfor %}
-    {% else %}
-    <div style="display:flex;gap:2rem;align-items:flex-start;flex-wrap:wrap">
-        <form method="POST" action="{{ url_for('gossip.start_collect', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Fetch new comments from YouTube only. No LLM.</p>
-            <button type="submit" class="btn btn-outline">Collect Comments</button>
-        </form>
-        <form method="POST" action="{{ url_for('gossip.start_local', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Collect + local LLM steps only. Stops before any cloud API call.</p>
-            <button type="submit" class="btn btn-outline">Run Local Steps</button>
-        </form>
-        <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Full pipeline: collect → summarize → analyze → report.</p>
-            {% if cost_estimates %}
-            <p style="margin-bottom:.5rem;color:#fb923c;font-size:.8rem">⚡ ~{{ cost_estimates.incremental.videos }} videos · ~${{ "%.2f"|format(cost_estimates.incremental.cost) }} ({{ cost_estimates.incremental.model }})</p>
+</div>
+{% endif %}
+
+{# ── Pipeline visualization ─────────────────────────────────────────────── #}
+<div class="section">
+    <h2>Pipeline Status</h2>
+    <div class="pipe-viz" id="pipe-viz">
+        <div class="pipe-grid">
+            {# Row 1: main pipeline #}
+            {% set steps = [
+                ('collect',   'Collect',   pipeline_status.collect),
+                ('summarize', 'Summarize', pipeline_status.summarize),
+                ('aggregate', 'Aggregate', pipeline_status.aggregate),
+                ('analyze',   'Analyze',   pipeline_status.analyze),
+                ('report',    'Report',    pipeline_status.report),
+            ] %}
+            {% for key, label, st in steps %}
+            <div class="pipe-step" data-step="{{ key }}" data-state="{{ st.state }}">
+                <div class="pipe-dot pipe-dot-{{ st.state }}"></div>
+                <div class="pipe-step-name">{{ label }}</div>
+                {% if st.timestamp %}
+                <div class="pipe-step-time" data-ts="{{ st.timestamp }}">{{ st.timestamp[:16] }}</div>
+                {% else %}
+                <div class="pipe-step-time muted">—</div>
+                {% endif %}
+                {% if st.detail %}
+                <div class="pipe-step-detail">{{ st.detail }}</div>
+                {% endif %}
+            </div>
+            {% if not loop.last %}
+            <div class="pipe-h-conn">→</div>
             {% endif %}
-            <button type="submit" class="btn btn-primary">Run Full Analysis</button>
-        </form>
-        <form method="POST" action="{{ url_for('gossip.start_force_summarize', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Re-summarize all videos with current LLM. Skips collection.</p>
-            {% if cost_estimates %}
-            <p style="margin-bottom:.5rem;color:#fb923c;font-size:.8rem">⚡ ~{{ cost_estimates.force.videos }} videos · ~${{ "%.2f"|format(cost_estimates.force.cost) }} ({{ cost_estimates.force.model }})</p>
-            {% endif %}
-            <button type="submit" class="btn btn-outline">Force Re-summarize</button>
-        </form>
-        <form method="POST" action="{{ url_for('gossip.start_reanalyze', community_id=community.id) }}">
-            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Re-aggregate + analyze + report. Skips collect &amp; summarize. Use after changing aliases or config.</p>
-            <button type="submit" class="btn btn-outline">Re-analyze Only</button>
-        </form>
+            {% endfor %}
+
+            {# Row 2: vertical connectors below Aggregate (col 5) and Analyze (col 7) #}
+            <div class="pipe-grid-spacer" style="grid-column:1/6;grid-row:2"></div>
+            <div class="pipe-v-conn" style="grid-column:5;grid-row:2">↓</div>
+            <div class="pipe-grid-spacer" style="grid-column:6;grid-row:2"></div>
+            <div class="pipe-v-conn" style="grid-column:7;grid-row:2">↓</div>
+            <div class="pipe-grid-spacer" style="grid-column:8/10;grid-row:2"></div>
+
+            {# Row 3: branch — Themes and Exec Reports #}
+            <div class="pipe-grid-spacer" style="grid-column:1/5;grid-row:3"></div>
+            <div class="pipe-step" data-step="themes" data-state="{{ pipeline_status.themes.state }}" style="grid-column:5;grid-row:3">
+                <div class="pipe-dot pipe-dot-{{ pipeline_status.themes.state }}"></div>
+                <div class="pipe-step-name">Themes</div>
+                {% if pipeline_status.themes.timestamp %}
+                <div class="pipe-step-time" data-ts="{{ pipeline_status.themes.timestamp }}">{{ pipeline_status.themes.timestamp[:16] }}</div>
+                {% else %}
+                <div class="pipe-step-time muted">—</div>
+                {% endif %}
+            </div>
+            <div class="pipe-h-conn" style="grid-column:6;grid-row:3">→</div>
+            <div class="pipe-step" data-step="exec_reports" data-state="{{ pipeline_status.exec_reports.state }}" style="grid-column:7;grid-row:3">
+                <div class="pipe-dot pipe-dot-{{ pipeline_status.exec_reports.state }}"></div>
+                <div class="pipe-step-name">Exec Reports</div>
+                {% if pipeline_status.exec_reports.timestamp %}
+                <div class="pipe-step-time" data-ts="{{ pipeline_status.exec_reports.timestamp }}">{{ pipeline_status.exec_reports.timestamp[:16] }}</div>
+                {% else %}
+                <div class="pipe-step-time muted">—</div>
+                {% endif %}
+                <div class="pipe-step-detail" style="font-size:.7rem;color:var(--muted)">▲ +Analyze</div>
+            </div>
+            <div class="pipe-grid-spacer" style="grid-column:8/10;grid-row:3"></div>
+        </div>
+
+        <div class="pipe-legend">
+            <span class="pipe-dot pipe-dot-fresh"></span> Fresh &nbsp;
+            <span class="pipe-dot pipe-dot-stale"></span> Stale &nbsp;
+            <span class="pipe-dot pipe-dot-never"></span> Never run
+        </div>
     </div>
-    {% endif %}
 </div>
 
+{# ── Preset cards ────────────────────────────────────────────────────────── #}
+{% if not active_run and not queued_runs %}
+<div class="section">
+    <h2>Run</h2>
+    <div class="pipe-presets">
+
+        {# Collect Only #}
+        <div class="pipe-preset {% if not presets.collect.enabled %}pipe-preset--disabled{% endif %}"
+             data-steps="collect">
+            <div class="pipe-preset-header">
+                <strong>Collect Only</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Collect"></span>
+                    <span class="pipe-mini-dot" title="Summarize"></span>
+                    <span class="pipe-mini-dot" title="Aggregate"></span>
+                    <span class="pipe-mini-dot" title="Analyze"></span>
+                    <span class="pipe-mini-dot" title="Report"></span>
+                    <span class="pipe-mini-dot" title="Themes"></span>
+                    <span class="pipe-mini-dot" title="Exec Reports"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Fetch new comments from YouTube. No LLM calls. Use for daily data collection.</p>
+            {% if presets.collect.reason %}
+            <p class="pipe-preset-reason">{{ presets.collect.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_collect', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Full Pipeline #}
+        <div class="pipe-preset {% if not presets.full_pipeline.enabled %}pipe-preset--disabled{% endif %}"
+             data-steps="collect summarize aggregate analyze report themes exec_reports">
+            <div class="pipe-preset-header">
+                <strong>Full Pipeline</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Collect"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Summarize"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Aggregate"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Analyze"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Report"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Themes"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Exec Reports"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Collect → Summarize → Aggregate → Analyze → Report → Themes → Exec Reports. Use for first run or weekly refresh.</p>
+            {% if presets.full_pipeline.cost %}
+            <p class="pipe-preset-cost">⚡ ~{{ presets.full_pipeline.cost.videos }} videos · ~${{ "%.2f"|format(presets.full_pipeline.cost.cost) }} ({{ presets.full_pipeline.cost.model }})</p>
+            {% endif %}
+            {% if presets.full_pipeline.reason %}
+            <p class="pipe-preset-reason">{{ presets.full_pipeline.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
+                <button type="submit" class="btn btn-primary btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Re-analyze #}
+        <div class="pipe-preset {% if not presets.reanalyze.enabled %}pipe-preset--disabled{% endif %}"
+             data-steps="aggregate analyze report themes exec_reports">
+            <div class="pipe-preset-header">
+                <strong>Re-analyze</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot" title="Collect"></span>
+                    <span class="pipe-mini-dot" title="Summarize"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Aggregate"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Analyze"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Report"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Themes"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Exec Reports"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Aggregate → Analyze → Report → Themes → Exec Reports. Skips collect &amp; summarize. Use after changing aliases or channel list.</p>
+            {% if presets.reanalyze.reason %}
+            <p class="pipe-preset-reason">{{ presets.reanalyze.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_reanalyze', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Re-summarize All #}
+        <div class="pipe-preset {% if not presets.resummarize_all.enabled %}pipe-preset--disabled{% endif %}"
+             data-steps="summarize aggregate analyze report themes exec_reports">
+            <div class="pipe-preset-header">
+                <strong>Re-summarize All</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot" title="Collect"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Summarize"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Aggregate"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Analyze"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Report"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Themes"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Exec Reports"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Force re-summarize all videos → full downstream chain. Skips collect. Use after changing the LLM model.</p>
+            {% if presets.resummarize_all.cost %}
+            <p class="pipe-preset-cost">⚡ ~{{ presets.resummarize_all.cost.videos }} videos · ~${{ "%.2f"|format(presets.resummarize_all.cost.cost) }} ({{ presets.resummarize_all.cost.model }})</p>
+            {% endif %}
+            {% if presets.resummarize_all.reason %}
+            <p class="pipe-preset-reason">{{ presets.resummarize_all.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_resummarize_all', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endif %}
+
+{# ── Run history ─────────────────────────────────────────────────────────── #}
 <div class="section">
     <h2>Run History</h2>
     {% if history %}
@@ -140,10 +291,66 @@
 {% endblock %}
 
 {% block scripts %}
-{% if active_run %}
 <script>
-const STEPS = ['pending','collecting','summarizing','aggregating','analyzing','reporting','complete'];
-const runId = {{ active_run.id }};
+// ── Timeago ──────────────────────────────────────────────────────────────
+function timeago(ts) {
+    if (!ts) return '';
+    const d = new Date(ts.replace(' ', 'T') + 'Z');
+    const diff = (Date.now() - d.getTime()) / 1000;
+    if (isNaN(diff) || diff < 0) return ts.slice(0,16);
+    if (diff < 90) return 'just now';
+    if (diff < 3600) return Math.round(diff / 60) + 'm ago';
+    if (diff < 86400) return Math.round(diff / 3600) + 'h ago';
+    return Math.round(diff / 86400) + 'd ago';
+}
+document.querySelectorAll('.pipe-step-time[data-ts]').forEach(el => {
+    el.textContent = timeago(el.dataset.ts);
+    el.title = el.dataset.ts;
+});
+
+// ── Preset hover → highlight pipeline steps ──────────────────────────────
+const STEP_KEYS = ['collect','summarize','aggregate','analyze','report','themes','exec_reports'];
+
+document.querySelectorAll('.pipe-preset').forEach(card => {
+    const active = (card.dataset.steps || '').split(' ').filter(Boolean);
+    card.addEventListener('mouseenter', () => {
+        STEP_KEYS.forEach(k => {
+            const node = document.querySelector(`.pipe-step[data-step="${k}"]`);
+            if (!node) return;
+            if (active.includes(k)) {
+                node.classList.add('pipe-step--highlighted');
+                node.classList.remove('pipe-step--dimmed');
+            } else {
+                node.classList.add('pipe-step--dimmed');
+                node.classList.remove('pipe-step--highlighted');
+            }
+        });
+    });
+    card.addEventListener('mouseleave', () => {
+        document.querySelectorAll('.pipe-step').forEach(n => {
+            n.classList.remove('pipe-step--highlighted', 'pipe-step--dimmed');
+        });
+    });
+});
+
+// ── Active run polling ───────────────────────────────────────────────────
+{% if active_run or queued_runs %}
+const STATUS_TO_STEP = {
+    collecting:    'collect',
+    summarizing:   'summarize',
+    aggregating:   'aggregate',
+    analyzing:     'analyze',
+    reporting:     'report',
+    theming:       'themes',
+    exec_reporting:'exec_reports',
+};
+const STEPS_ALL = ['collecting','summarizing','aggregating','analyzing','reporting','theming','exec_reporting','complete'];
+{% set poll_run = active_run or queued_runs[0] %}
+const runId = {{ poll_run.id }};
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 function renderLog(raw) {
     if (!raw) return;
@@ -154,26 +361,17 @@ function renderLog(raw) {
         const parts = line.split('\t');
         const kind = parts[0];
         if (kind === 'channel') {
-            const name = parts[1] || '';
-            const info = parts[2] || '';
-            return `<span style="color:#7dd3fc;font-weight:bold">▶ ${escHtml(name)}</span>  <span style="color:#94a3b8">${escHtml(info)}</span>`;
+            return `<span style="color:#7dd3fc;font-weight:bold">▶ ${escHtml(parts[1]||'')}</span>  <span style="color:#94a3b8">${escHtml(parts[2]||'')}</span>`;
         } else if (kind === 'video') {
-            const handle  = parts[1] || '';
-            const pos     = parts[2] || '';
-            const title   = parts[3] || '';
-            const fetched = parts[4] || '';
-            const newC    = parts[5] || '';
-            const newNum  = parseInt((newC.match(/\d+/) || ['0'])[0]);
-            const newColor = newNum > 0 ? '#4ade80' : '#64748b';
-            return `  <span style="color:#7dd3fc">${escHtml(handle)}</span>  <span style="color:#64748b">${escHtml(pos)}</span>  ${escHtml(title.substring(0,50))}  <span style="color:#94a3b8">${escHtml(fetched)}</span>  <span style="color:${newColor}">${escHtml(newC)}</span>`;
+            const newNum = parseInt(((parts[5]||'').match(/\d+/)||['0'])[0]);
+            const nc = newNum > 0 ? '#4ade80' : '#64748b';
+            return `  <span style="color:#7dd3fc">${escHtml(parts[1]||'')}</span>  <span style="color:#64748b">${escHtml(parts[2]||'')}</span>  ${escHtml((parts[3]||'').substring(0,50))}  <span style="color:#94a3b8">${escHtml(parts[4]||'')}</span>  <span style="color:${nc}">${escHtml(parts[5]||'')}</span>`;
         } else if (kind === 'done') {
-            const name = parts[1] || '';
-            const info = parts[2] || '';
-            return `<span style="color:#4ade80">✓ ${escHtml(name)}</span>  <span style="color:#a3e635">${escHtml(info)}</span>`;
+            return `<span style="color:#4ade80">✓ ${escHtml(parts[1]||'')}</span>  <span style="color:#a3e635">${escHtml(parts[2]||'')}</span>`;
         } else if (kind === 'quota') {
-            return `<span style="color:#fb923c">⚡ ${escHtml(parts[1] || '')}</span>`;
+            return `<span style="color:#fb923c">⚡ ${escHtml(parts[1]||'')}</span>`;
         } else if (kind === 'info') {
-            return `<span style="color:#fbbf24">ℹ ${escHtml(parts[1] || '')}</span>`;
+            return `<span style="color:#fbbf24">ℹ ${escHtml(parts[1]||'')}</span>`;
         } else {
             return `<span style="color:#cbd5e1">${escHtml(line)}</span>`;
         }
@@ -181,43 +379,58 @@ function renderLog(raw) {
     logEl.scrollTop = logEl.scrollHeight;
 }
 
-function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function updatePipelineNodes(currentStep) {
+    const activeStepKey = STATUS_TO_STEP[currentStep];
+    const activeIdx = STEPS_ALL.indexOf(currentStep);
+    STEPS_ALL.forEach((s, i) => {
+        const key = STATUS_TO_STEP[s];
+        if (!key) return;
+        const node = document.querySelector(`.pipe-step[data-step="${key}"]`);
+        if (!node) return;
+        node.classList.remove('pipe-step--active', 'pipe-step--done');
+        if (s === currentStep) {
+            node.classList.add('pipe-step--active');
+        } else if (i < activeIdx) {
+            node.classList.add('pipe-step--done');
+        }
+    });
 }
 
 async function pollStatus() {
     try {
         const resp = await fetch(`/gossip/run/${runId}/status`);
         const data = await resp.json();
-        document.getElementById('run-detail').textContent = data.progress_detail || data.status;
-        const badge = document.querySelector('.status-badge');
-        badge.textContent = data.status;
-        badge.className = `status-badge status-${data.status}`;
 
-        const idx = STEPS.indexOf(data.status);
-        const pct = Math.max(0, Math.min(100, (idx / (STEPS.length - 1)) * 100));
-        document.getElementById('progress-fill').style.width = pct + '%';
+        const detail = document.getElementById('run-detail');
+        if (detail) detail.textContent = data.progress_detail || data.status;
+
+        const badge = document.getElementById('run-badge');
+        if (badge) { badge.textContent = data.status; badge.className = `status-badge status-${data.status}`; }
+
+        const idx = STEPS_ALL.indexOf(data.status);
+        const pct = Math.max(0, Math.min(100, ((idx + 1) / STEPS_ALL.length) * 100));
+        const fill = document.getElementById('progress-fill');
+        if (fill) fill.style.width = pct + '%';
 
         renderLog(data.progress_log);
+        updatePipelineNodes(data.status);
 
         const quotaUnits = data.quota_units || 0;
         const quotaEl = document.getElementById('quota-counter');
         if (quotaEl && (data.status === 'collecting' || quotaUnits > 0)) {
             quotaEl.style.display = 'block';
-            document.getElementById('quota-text').textContent =
-                quotaUnits.toLocaleString() + ' / 10,000';
-            const pct = Math.min(100, (quotaUnits / 10000) * 100).toFixed(1);
-            document.getElementById('quota-fill').style.width = pct + '%';
+            document.getElementById('quota-text').textContent = quotaUnits.toLocaleString() + ' / 10,000';
+            document.getElementById('quota-fill').style.width = Math.min(100, (quotaUnits / 10000) * 100).toFixed(1) + '%';
         }
 
         if (data.status === 'complete' || data.status === 'failed') {
-            setTimeout(() => location.reload(), 1000);
+            setTimeout(() => location.reload(), 1200);
             return;
         }
     } catch(e) {}
     setTimeout(pollStatus, 3000);
 }
 pollStatus();
-</script>
 {% endif %}
+</script>
 {% endblock %}

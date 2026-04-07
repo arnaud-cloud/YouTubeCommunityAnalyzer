@@ -708,10 +708,167 @@ a:hover { color: var(--accent-hover); }
     overflow-x: auto;
 }
 
+/* ── Pipeline visualization ──────────────────────────────────────────── */
+.pipe-viz {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    overflow-x: auto;
+}
+
+.pipe-grid {
+    display: grid;
+    grid-template-columns: 1fr 36px 1fr 36px 1fr 36px 1fr 36px 1fr;
+    grid-template-rows: auto 24px auto;
+    align-items: center;
+    min-width: 640px;
+}
+
+.pipe-step {
+    background: var(--bg);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    text-align: center;
+    transition: border-color 0.2s, opacity 0.2s, box-shadow 0.2s;
+    cursor: default;
+    position: relative;
+}
+.pipe-step[data-state="fresh"]  { border-color: var(--success); }
+.pipe-step[data-state="stale"]  { border-color: var(--warning); }
+.pipe-step[data-state="never"]  { border-color: var(--border); opacity: 0.55; }
+
+.pipe-step--active {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.25);
+    animation: pipe-pulse 1.5s ease-in-out infinite;
+}
+.pipe-step--done {
+    border-color: var(--success) !important;
+    opacity: 0.7;
+}
+.pipe-step--highlighted {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(124, 77, 255, 0.2);
+    opacity: 1 !important;
+}
+.pipe-step--dimmed { opacity: 0.3 !important; }
+
+@keyframes pipe-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(124, 77, 255, 0.25); }
+    50%       { box-shadow: 0 0 0 6px rgba(124, 77, 255, 0.12); }
+}
+
+.pipe-step-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0.2rem 0 0.15rem;
+}
+.pipe-step-time {
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+.pipe-step-detail {
+    font-size: 0.7rem;
+    color: var(--warning);
+    margin-top: 0.15rem;
+}
+
+.pipe-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+.pipe-dot-fresh { background: var(--success); }
+.pipe-dot-stale { background: var(--warning); }
+.pipe-dot-never { background: var(--muted); opacity: 0.5; }
+
+.pipe-h-conn,
+.pipe-v-conn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 1rem;
+    user-select: none;
+}
+
+.pipe-legend {
+    margin-top: 1rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.pipe-legend .pipe-dot { margin-right: 2px; }
+
+/* ── Preset cards ────────────────────────────────────────────────────── */
+.pipe-presets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.pipe-preset {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.1rem;
+    transition: border-color 0.2s;
+    cursor: default;
+}
+.pipe-preset:hover { border-color: var(--accent); }
+.pipe-preset--disabled { opacity: 0.5; pointer-events: none; }
+
+.pipe-preset-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.pipe-preset-header strong { font-size: 0.95rem; }
+
+.pipe-mini-dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+.pipe-mini-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+}
+.pipe-mini-dot--on { background: var(--accent); }
+
+.pipe-preset-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+}
+.pipe-preset-cost {
+    font-size: 0.78rem;
+    color: #fb923c;
+    margin-bottom: 0.6rem;
+}
+.pipe-preset-reason {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-style: italic;
+}
+
 /* Responsive */
 @media (max-width: 900px) {
     .sidebar { display: none; }
     .content { margin-left: 0; }
     .stat-tiles { grid-template-columns: repeat(2, 1fr); }
     .chart-row { grid-template-columns: 1fr; }
+    .pipe-presets { grid-template-columns: 1fr; }
 }

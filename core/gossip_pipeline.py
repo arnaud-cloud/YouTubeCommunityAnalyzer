@@ -307,15 +307,26 @@ def run_reanalyze(db_path: str, community_id: int, run_id: int):
         log.info(f"[Run {run_id}] Re-analyze — Step 3: Generating report")
         gossip_report.generate_report_html(conn, analysis_id)
 
+        # Step 4: Themes (LLM titles)
+        _update_run(conn, run_id, "theming", "Clustering themes...")
+        log.info(f"[Run {run_id}] Re-analyze — Step 4: Themes")
+        try:
+            gossip_themes.compute_themes(conn, community_id, use_llm=True, progress_callback=progress)
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme compute failed (non-fatal): {te}")
+
+        # Step 5: Executive reports
+        _update_run(conn, run_id, "exec_reporting", "Generating executive reports...")
+        log.info(f"[Run {run_id}] Re-analyze — Step 5: Executive reports")
+        try:
+            from .executive_summary import generate_executive_summary, generate_top_insights
+            generate_executive_summary(conn, community_id)
+            generate_top_insights(conn, community_id)
+        except Exception as ee:
+            log.warning(f"[Run {run_id}] Executive reports failed (non-fatal): {ee}")
+
         _complete_run(conn, run_id, analysis_id)
         log.info(f"[Run {run_id}] Re-analyze complete. Analysis ID: {analysis_id}")
-
-        # Auto-recompute themes
-        try:
-            n = gossip_themes.compute_themes(conn, community_id, use_llm=False)
-            log.info(f"[Run {run_id}] Auto-computed {n} themes.")
-        except Exception as te:
-            log.warning(f"[Run {run_id}] Theme auto-recompute failed (non-fatal): {te}")
 
     except Exception as e:
         log.error(f"[Run {run_id}] Re-analyze failed: {e}", exc_info=True)
@@ -363,18 +374,94 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
         log.info(f"[Run {run_id}] Step 5: Generating report")
         gossip_report.generate_report_html(conn, analysis_id)
 
+        # Step 6: Themes (LLM titles)
+        _update_run(conn, run_id, "theming", "Clustering themes...")
+        log.info(f"[Run {run_id}] Step 6: Themes")
+        try:
+            gossip_themes.compute_themes(conn, community_id, use_llm=True, progress_callback=progress)
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme compute failed (non-fatal): {te}")
+
+        # Step 7: Executive reports
+        _update_run(conn, run_id, "exec_reporting", "Generating executive reports...")
+        log.info(f"[Run {run_id}] Step 7: Executive reports")
+        try:
+            from .executive_summary import generate_executive_summary, generate_top_insights
+            generate_executive_summary(conn, community_id)
+            generate_top_insights(conn, community_id)
+        except Exception as ee:
+            log.warning(f"[Run {run_id}] Executive reports failed (non-fatal): {ee}")
+
         _complete_run(conn, run_id, analysis_id)
         log.info(f"[Run {run_id}] Pipeline complete. Analysis ID: {analysis_id}")
 
-        # Auto-recompute themes (rule-based, no LLM — fast)
-        try:
-            n = gossip_themes.compute_themes(conn, community_id, use_llm=False)
-            log.info(f"[Run {run_id}] Auto-computed {n} themes.")
-        except Exception as te:
-            log.warning(f"[Run {run_id}] Theme auto-recompute failed (non-fatal): {te}")
-
     except Exception as e:
         log.error(f"[Run {run_id}] Pipeline failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_resummarize_all(db_path: str, community_id: int, run_id: int):
+    """
+    Force re-summarize ALL videos → aggregate → analyze → report → themes (LLM) → exec reports.
+    Skips collection. Used after changing LLM model so all summaries are regenerated.
+    """
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+
+        # Step 1: Force summarize all videos
+        _update_run(conn, run_id, "summarizing", "Force re-summarizing all videos...")
+        progress("info\tForce mode: reprocessing all videos regardless of prior summaries")
+        log.info(f"[Run {run_id}] Re-summarize all — Step 1: Summarizing (force=True)")
+        gossip_summarize.summarize_community(conn, community_id,
+                                             force=True, progress_callback=progress)
+
+        # Step 2: Aggregate
+        _update_run(conn, run_id, "aggregating", "Computing metrics...")
+        log.info(f"[Run {run_id}] Re-summarize all — Step 2: Aggregating")
+        agg_id = gossip_aggregate.aggregate_community(conn, community_id,
+                                                      progress_callback=progress)
+
+        # Step 3: Analyze (LLM)
+        _update_run(conn, run_id, "analyzing", "Running LLM narrative synthesis...")
+        log.info(f"[Run {run_id}] Re-summarize all — Step 3: Analyzing")
+        analysis_id = gossip_analyze.analyze_aggregation(conn, agg_id,
+                                                         progress_callback=progress)
+
+        # Step 4: Report
+        _update_run(conn, run_id, "reporting", "Generating report...")
+        conn.execute("UPDATE gossip_runs SET analysis_id = ? WHERE id = ?",
+                     (analysis_id, run_id))
+        conn.commit()
+        log.info(f"[Run {run_id}] Re-summarize all — Step 4: Generating report")
+        gossip_report.generate_report_html(conn, analysis_id)
+
+        # Step 5: Themes (LLM titles)
+        _update_run(conn, run_id, "theming", "Clustering themes...")
+        log.info(f"[Run {run_id}] Re-summarize all — Step 5: Themes")
+        try:
+            gossip_themes.compute_themes(conn, community_id, use_llm=True,
+                                         progress_callback=progress)
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme compute failed (non-fatal): {te}")
+
+        # Step 6: Executive reports
+        _update_run(conn, run_id, "exec_reporting", "Generating executive reports...")
+        log.info(f"[Run {run_id}] Re-summarize all — Step 6: Executive reports")
+        try:
+            from .executive_summary import generate_executive_summary, generate_top_insights
+            generate_executive_summary(conn, community_id)
+            generate_top_insights(conn, community_id)
+        except Exception as ee:
+            log.warning(f"[Run {run_id}] Executive reports failed (non-fatal): {ee}")
+
+        _complete_run(conn, run_id, analysis_id)
+        log.info(f"[Run {run_id}] Re-summarize all complete. Analysis ID: {analysis_id}")
+
+    except Exception as e:
+        log.error(f"[Run {run_id}] Re-summarize all failed: {e}", exc_info=True)
         _fail_run(conn, run_id, str(e))
     finally:
         conn.close()
