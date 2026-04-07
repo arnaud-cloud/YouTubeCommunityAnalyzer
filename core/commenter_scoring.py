@@ -260,9 +260,15 @@ def score_community(conn, community_id: int) -> int:
 
     # Preserve existing LLM tone scores across re-scoring
     existing_tone: dict[str, dict] = {
-        r["author_channel_id"]: {"score": r["llm_tone_score"], "reason": r["llm_tone_reason"]}
+        r["author_channel_id"]: {
+            "llm_tone_score": r["llm_tone_score"],
+            "llm_tone_reason": r["llm_tone_reason"],
+            "llm_tone_backend": r["llm_tone_backend"],
+            "llm_tone_model": r["llm_tone_model"],
+        }
         for r in conn.execute(
-            "SELECT author_channel_id, llm_tone_score, llm_tone_reason "
+            "SELECT author_channel_id, llm_tone_score, llm_tone_reason, "
+            "llm_tone_backend, llm_tone_model "
             "FROM commenter_scores WHERE community_id = ? AND llm_tone_score IS NOT NULL",
             (community_id,),
         ).fetchall()
@@ -270,8 +276,10 @@ def score_community(conn, community_id: int) -> int:
     for s in stats:
         tone = existing_tone.get(s["author_channel_id"])
         if tone:
-            s["llm_tone_score"] = tone["score"]
-            s["llm_tone_reason"] = tone["reason"]
+            s["llm_tone_score"]   = tone["llm_tone_score"]
+            s["llm_tone_reason"]  = tone["llm_tone_reason"]
+            s["llm_tone_backend"] = tone["llm_tone_backend"]
+            s["llm_tone_model"]   = tone["llm_tone_model"]
 
     enriched = _compute_component_scores(stats)
 
@@ -284,10 +292,10 @@ def score_community(conn, community_id: int) -> int:
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
                 factual_anchor_score, avg_length_score, vocab_richness_score,
-                llm_tone_score, llm_tone_reason,
+                llm_tone_score, llm_tone_reason, llm_tone_backend, llm_tone_model,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -303,6 +311,8 @@ def score_community(conn, community_id: int) -> int:
                 r["vocab_richness_score"],
                 r.get("llm_tone_score"),
                 r.get("llm_tone_reason"),
+                r.get("llm_tone_backend"),
+                r.get("llm_tone_model"),
                 r["reply_penalty"],
                 r["reply_ratio"],
                 r["comment_count"],
@@ -321,32 +331,50 @@ def score_community(conn, community_id: int) -> int:
 
 
 def score_community_tone(conn, community_id: int,
-                         progress_callback=None) -> int:
+                         progress_callback=None,
+                         scope: str = "all") -> int:
     """
-    Run an Ollama LLM pass to score tone (politeness + constructiveness + depth)
-    for all commenters in the community. Updates llm_tone_score and llm_tone_reason,
+    Run an LLM pass to score tone (politeness + constructiveness + depth)
+    for commenters in the community. Updates llm_tone_score and llm_tone_reason,
     then recomputes quality_score / tier using the LLM score in the content slot.
+
+    scope: "all" = every commenter, "creators" = channel owners only.
+    Commenters already scored with the currently-configured backend+model are skipped.
 
     Requires commenter scores to already exist (call score_community() first).
     Returns number of commenters scored.
     """
     settings = get_all_settings(conn)
-    summarize_backend = settings.get("llm_summarize_backend", "anthropic")
-    if summarize_backend != "ollama":
-        raise ValueError(
-            f"LLM tone scoring requires Ollama backend "
-            f"(current summarize backend: {summarize_backend!r})"
-        )
-
     cfg = _settings_to_llm_config(settings)
-    llm = LLMClient(cfg, role="summarize")
+    llm = LLMClient(cfg, role="tone")
+    current_backend = llm.backend
+    current_model = llm._model
 
-    # Load all scored commenters for this community
-    rows = conn.execute(
-        "SELECT author_channel_id, author_name FROM commenter_scores "
-        "WHERE community_id = ? ORDER BY quality_score DESC",
-        (community_id,),
-    ).fetchall()
+    # Determine creator channel IDs when scoping to creators only
+    creator_ids: set[str] | None = None
+    if scope == "creators":
+        channel_ids_for_scope = get_community_channel_ids(conn, community_id)
+        # Channel IDs in community_sources / community_channels map to channel records
+        # The creator's author_channel_id equals their channel_id in the channels table
+        creator_ids = set(channel_ids_for_scope)
+
+    # Load scored commenters, filtered by scope and skip already-processed
+    query = (
+        "SELECT author_channel_id, author_name, llm_tone_backend, llm_tone_model "
+        "FROM commenter_scores WHERE community_id = ? ORDER BY quality_score DESC"
+    )
+    all_rows = conn.execute(query, (community_id,)).fetchall()
+
+    rows = []
+    for r in all_rows:
+        # Scope filter
+        if creator_ids is not None and r["author_channel_id"] not in creator_ids:
+            continue
+        # Skip if already scored with the same backend+model
+        if r["llm_tone_backend"] == current_backend and r["llm_tone_model"] == current_model:
+            continue
+        rows.append(r)
+
     if not rows:
         return 0
 
@@ -422,9 +450,11 @@ def score_community_tone(conn, community_id: int,
             except (TypeError, ValueError):
                 continue
             conn.execute(
-                "UPDATE commenter_scores SET llm_tone_score = ?, llm_tone_reason = ? "
+                "UPDATE commenter_scores "
+                "SET llm_tone_score = ?, llm_tone_reason = ?, "
+                "    llm_tone_backend = ?, llm_tone_model = ? "
                 "WHERE community_id = ? AND author_channel_id = ?",
-                (tone_score, reason, community_id, aid),
+                (tone_score, reason, current_backend, current_model, community_id, aid),
             )
             total_scored += 1
 
@@ -440,9 +470,15 @@ def score_community_tone(conn, community_id: int,
         return total_scored
 
     tone_map: dict[str, dict] = {
-        r["author_channel_id"]: {"llm_tone_score": r["llm_tone_score"], "llm_tone_reason": r["llm_tone_reason"]}
+        r["author_channel_id"]: {
+            "llm_tone_score":   r["llm_tone_score"],
+            "llm_tone_reason":  r["llm_tone_reason"],
+            "llm_tone_backend": r["llm_tone_backend"],
+            "llm_tone_model":   r["llm_tone_model"],
+        }
         for r in conn.execute(
-            "SELECT author_channel_id, llm_tone_score, llm_tone_reason "
+            "SELECT author_channel_id, llm_tone_score, llm_tone_reason, "
+            "llm_tone_backend, llm_tone_model "
             "FROM commenter_scores WHERE community_id = ?",
             (community_id,),
         ).fetchall()
@@ -450,8 +486,10 @@ def score_community_tone(conn, community_id: int,
     for s in stats:
         t = tone_map.get(s["author_channel_id"], {})
         if t.get("llm_tone_score") is not None:
-            s["llm_tone_score"] = t["llm_tone_score"]
-            s["llm_tone_reason"] = t["llm_tone_reason"]
+            s["llm_tone_score"]   = t["llm_tone_score"]
+            s["llm_tone_reason"]  = t["llm_tone_reason"]
+            s["llm_tone_backend"] = t["llm_tone_backend"]
+            s["llm_tone_model"]   = t["llm_tone_model"]
 
     enriched = _compute_component_scores(stats)
 
@@ -464,10 +502,10 @@ def score_community_tone(conn, community_id: int,
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
                 factual_anchor_score, avg_length_score, vocab_richness_score,
-                llm_tone_score, llm_tone_reason,
+                llm_tone_score, llm_tone_reason, llm_tone_backend, llm_tone_model,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -483,6 +521,8 @@ def score_community_tone(conn, community_id: int,
                 r["vocab_richness_score"],
                 r.get("llm_tone_score"),
                 r.get("llm_tone_reason"),
+                r.get("llm_tone_backend"),
+                r.get("llm_tone_model"),
                 r["reply_penalty"],
                 r["reply_ratio"],
                 r["comment_count"],

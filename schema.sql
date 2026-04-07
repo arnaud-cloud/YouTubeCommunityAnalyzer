@@ -239,6 +239,8 @@ CREATE TABLE IF NOT EXISTS commenter_scores (
     vocab_richness_score REAL,
     llm_tone_score       REAL,
     llm_tone_reason      TEXT,
+    llm_tone_backend     TEXT,
+    llm_tone_model       TEXT,
     reply_penalty        REAL,
     reply_ratio          REAL,
     comment_count        INTEGER,

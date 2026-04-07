@@ -706,7 +706,12 @@ def commenters(community_id):
 
     computed_at = rows[0]["computed_at"] if rows else None
     settings = get_all_settings(conn)
-    has_ollama = settings.get("llm_summarize_backend", "anthropic") == "ollama"
+    tone_backend = settings.get("llm_tone_backend", "ollama")
+    tone_model = settings.get(
+        f"llm_tone_{tone_backend}_model",
+        "mistral-nemo:12b" if tone_backend == "ollama" else "claude-haiku-4-5",
+    )
+    has_ollama = True  # tone scoring works with both backends now
     conn.close()
 
     tone_job = _tone_jobs.get(community_id, {"status": "idle"})
@@ -719,6 +724,8 @@ def commenters(community_id):
         channel_owner_ids=set(channel_owner_ids),
         creators_only=creators_only,
         has_ollama=has_ollama,
+        tone_backend=tone_backend,
+        tone_model=tone_model,
         tone_job=tone_job,
         page=page,
         per_page=per_page,
@@ -747,10 +754,11 @@ def score_commenters_now(community_id):
 
 @bp.route("/<int:community_id>/tone-score-commenters", methods=["POST"])
 def tone_score_commenters(community_id):
-    """Run Ollama LLM tone scoring pass on all scored commenters."""
+    """Run LLM tone scoring pass on commenters. Scope: 'all' or 'creators'."""
     import time
     from core.commenter_scoring import score_community, score_community_tone
     db_path = current_app.config["DB_PATH"]
+    scope = request.form.get("scope", "all")
 
     # Don't start a second job if one is already running
     existing_job = _tone_jobs.get(community_id, {})
@@ -761,6 +769,7 @@ def tone_score_commenters(community_id):
     _tone_jobs[community_id] = {
         "status": "running", "done": 0, "total": 0,
         "started_at": time.time(), "error": None,
+        "scope": scope,
     }
 
     def _run():
@@ -773,19 +782,18 @@ def tone_score_commenters(community_id):
             if existing == 0:
                 score_community(conn, community_id)
 
-            total = conn.execute(
-                "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
-                (community_id,),
-            ).fetchone()[0]
-            _tone_jobs[community_id]["total"] = total
-
             def _progress(done, total_count):
                 _tone_jobs[community_id]["done"] = done
                 _tone_jobs[community_id]["total"] = total_count
 
-            score_community_tone(conn, community_id, progress_callback=_progress)
+            n = score_community_tone(
+                conn, community_id,
+                progress_callback=_progress,
+                scope=scope,
+            )
             _tone_jobs[community_id]["status"] = "done"
-            _tone_jobs[community_id]["done"] = total
+            _tone_jobs[community_id]["done"] = n
+            _tone_jobs[community_id]["total"] = n
         except Exception as e:
             log.error(f"Tone scoring failed for community {community_id}: {e}", exc_info=True)
             _tone_jobs[community_id]["status"] = "error"
