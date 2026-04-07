@@ -427,7 +427,7 @@ def top_insights(community_id):
         flash("Community not found.", "error")
         return redirect(url_for("main.home"))
 
-    min_evidence = request.args.get("min_evidence", 5, type=int)
+    min_evidence = request.args.get("min_evidence", 10, type=int)
     regenerate = request.args.get("regenerate") == "1"
     cached = None if regenerate else get_cached_report(
         conn, community_id, "top_insights", min_evidence

@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS executive_reports (
     report_type     TEXT NOT NULL DEFAULT 'executive_summary',
     min_evidence    INTEGER NOT NULL DEFAULT 0,
     report_html     TEXT NOT NULL,
+    report_json     TEXT,
     llm_backend     TEXT,
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE

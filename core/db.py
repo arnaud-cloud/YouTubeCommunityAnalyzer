@@ -40,6 +40,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
             WHERE last_comment_published_at IS NULL
         """)
 
+    # executive_reports: report_json column
+    if "executive_reports" in {
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }:
+        er_cols = {row[1] for row in conn.execute("PRAGMA table_info(executive_reports)")}
+        if "report_json" not in er_cols:
+            conn.execute("ALTER TABLE executive_reports ADD COLUMN report_json TEXT")
+
     runs_cols = {row[1] for row in conn.execute("PRAGMA table_info(gossip_runs)")}
     if "progress_log" not in runs_cols:
         conn.execute(
