@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Discover Sources — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Discover Sources</h1>
+    <p class="muted">Search YouTube and Reddit for communities matching your topics. LLM-assisted suggestions are verified via each platform's API.</p>
+</div>
+
+<div class="form-card">
+    <div class="form-group">
+        <label for="keywords">Topics or keywords</label>
+        <input type="text" id="keywords" placeholder="e.g. French nonduality teachers, homelab networking"
+               style="width:100%;font-size:1.05rem;" value="">
+        <small>You can use topic names, creator names, or community labels.</small>
+    </div>
+    <button id="search-btn" class="btn btn-primary">Search</button>
+    <span id="search-status" class="muted" style="margin-left:1rem;display:none;">Searching…</span>
+</div>
+
+<div id="results-container" style="display:none;">
+    <div class="section">
+        <h2>Results <span id="results-count" class="muted"></span></h2>
+        <div id="results-list"></div>
+    </div>
+
+    <div class="form-card" id="action-card">
+        <h3>Add selected sources to:</h3>
+        <div class="form-row" style="align-items:flex-end;gap:1rem;">
+            <div class="form-group" style="flex:1;">
+                <label>New community</label>
+                <div style="display:flex;gap:0.5rem;">
+                    <input type="text" id="new-community-name" placeholder="Community name" style="flex:1;">
+                    <button id="create-btn" class="btn btn-primary">Create &amp; Add</button>
+                </div>
+            </div>
+            {% if communities %}
+            <div class="form-group" style="flex:1;">
+                <label>Existing community</label>
+                <div style="display:flex;gap:0.5rem;">
+                    <select id="existing-community-select" style="flex:1;">
+                        {% if prefill_community_id %}
+                        {% for c in communities %}
+                        <option value="{{ c.id }}" {% if c.id|string == prefill_community_id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                        {% else %}
+                        {% for c in communities %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                        {% endif %}
+                    </select>
+                    <button id="add-existing-btn" class="btn btn-secondary">Add to</button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <p id="action-status" class="muted" style="margin-top:0.5rem;display:none;"></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ORIGIN_LABELS = {
+    api_search:     {text: 'API',          cls: 'badge-youtube'},
+    llm_verified:   {text: 'LLM verified', cls: 'badge-reddit'},
+    llm_unverified: {text: 'LLM hint',     cls: ''},
+};
+
+let currentResults = [];
+
+document.getElementById('search-btn').addEventListener('click', runSearch);
+document.getElementById('keywords').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runSearch();
+});
+
+async function runSearch() {
+    const kw = document.getElementById('keywords').value.trim();
+    if (!kw) return;
+
+    const btn = document.getElementById('search-btn');
+    const status = document.getElementById('search-status');
+    btn.disabled = true;
+    status.style.display = '';
+    document.getElementById('results-container').style.display = 'none';
+
+    try {
+        const resp = await fetch('/discovery/search', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({keywords: kw}),
+        });
+        const data = await resp.json();
+        if (data.error) {
+            alert('Search error: ' + data.error);
+            return;
+        }
+        currentResults = data.results || [];
+        renderResults(currentResults);
+    } catch (e) {
+        alert('Search failed: ' + e);
+    } finally {
+        btn.disabled = false;
+        status.style.display = 'none';
+    }
+}
+
+function renderResults(results) {
+    const list = document.getElementById('results-list');
+    const count = document.getElementById('results-count');
+    count.textContent = `(${results.length})`;
+
+    if (!results.length) {
+        list.innerHTML = '<p class="muted">No results found. Try different keywords.</p>';
+        document.getElementById('results-container').style.display = '';
+        document.getElementById('action-card').style.display = 'none';
+        return;
+    }
+
+    list.innerHTML = results.map((r, i) => {
+        const badge = ORIGIN_LABELS[r.origin] || {text: r.origin, cls: ''};
+        const typeBadge = r.source_type === 'reddit'
+            ? '<span class="badge badge-reddit">Reddit</span>'
+            : '<span class="badge badge-youtube">YouTube</span>';
+        const members = r.member_count > 0
+            ? `<span class="muted">${r.member_count.toLocaleString()} members</span>`
+            : '';
+        const desc = r.description
+            ? `<p class="muted" style="margin:0.2rem 0 0;">${escHtml(r.description.slice(0, 200))}</p>`
+            : '';
+        return `
+        <div class="result-card" style="display:flex;align-items:flex-start;gap:0.75rem;padding:0.75rem 0;border-bottom:1px solid var(--border-color);">
+            <input type="checkbox" class="result-check" data-idx="${i}"
+                   style="margin-top:0.25rem;flex-shrink:0;" checked>
+            <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                    ${typeBadge}
+                    <strong>${escHtml(r.display_name)}</strong>
+                    <code class="muted" style="font-size:0.8rem;">${escHtml(r.source_id)}</code>
+                    <span class="badge ${badge.cls}" style="font-size:0.7rem;">${badge.text}</span>
+                    ${members}
+                </div>
+                ${desc}
+            </div>
+        </div>`;
+    }).join('');
+
+    document.getElementById('results-container').style.display = '';
+    document.getElementById('action-card').style.display = '';
+}
+
+function selectedSources() {
+    return Array.from(document.querySelectorAll('.result-check:checked'))
+        .map(cb => currentResults[parseInt(cb.dataset.idx)])
+        .filter(Boolean)
+        .map(r => ({source_type: r.source_type, source_id: r.source_id, display_name: r.display_name}));
+}
+
+document.getElementById('create-btn').addEventListener('click', async () => {
+    const name = document.getElementById('new-community-name').value.trim();
+    if (!name) { alert('Enter a community name.'); return; }
+    const sources = selectedSources();
+    if (!sources.length) { alert('Select at least one source.'); return; }
+
+    const resp = await fetch('/discovery/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, sources}),
+    });
+    const data = await resp.json();
+    if (data.error) { alert('Error: ' + data.error); return; }
+    window.location.href = data.redirect;
+});
+
+const addExistingBtn = document.getElementById('add-existing-btn');
+if (addExistingBtn) {
+    addExistingBtn.addEventListener('click', async () => {
+        const cid = document.getElementById('existing-community-select').value;
+        const sources = selectedSources();
+        if (!sources.length) { alert('Select at least one source.'); return; }
+
+        const resp = await fetch(`/discovery/add/${cid}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({sources}),
+        });
+        const data = await resp.json();
+        if (data.error) { alert('Error: ' + data.error); return; }
+        window.location.href = data.redirect;
+    });
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}

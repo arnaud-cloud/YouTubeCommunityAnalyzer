@@ -60,6 +60,37 @@ def _migrate(conn: sqlite3.Connection) -> None:
             "ALTER TABLE gossip_runs ADD COLUMN quota_units INTEGER DEFAULT 0"
         )
 
+    # Multi-source migration: new columns on comments + videos
+    comments_cols = {row[1] for row in conn.execute("PRAGMA table_info(comments)")}
+    if "source_type" not in comments_cols:
+        conn.execute("ALTER TABLE comments ADD COLUMN source_type TEXT DEFAULT 'youtube'")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_comments_source_type ON comments(source_type)"
+        )
+    if "engagement_normalized" not in comments_cols:
+        conn.execute("ALTER TABLE comments ADD COLUMN engagement_normalized REAL")
+
+    videos_cols = {row[1] for row in conn.execute("PRAGMA table_info(videos)")}
+    if "source_type" not in videos_cols:
+        conn.execute("ALTER TABLE videos ADD COLUMN source_type TEXT DEFAULT 'youtube'")
+
+    # Migrate community_channels → community_sources (one-time, only if sources is empty)
+    sources_empty = conn.execute(
+        "SELECT COUNT(*) FROM community_sources"
+    ).fetchone()[0] == 0
+    old_channels_exist = conn.execute(
+        "SELECT COUNT(*) FROM community_channels"
+    ).fetchone()[0] > 0
+    if sources_empty and old_channels_exist:
+        conn.execute("""
+            INSERT OR IGNORE INTO community_sources
+                (community_id, source_type, source_id, display_name)
+            SELECT cc.community_id, 'youtube', cc.channel_id,
+                   COALESCE(ch.channel_name, cc.channel_id)
+            FROM community_channels cc
+            LEFT JOIN channels ch ON cc.channel_id = ch.channel_id
+        """)
+
 
 def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
     """Read a single setting value."""
@@ -83,8 +114,30 @@ def get_all_settings(conn: sqlite3.Connection) -> dict[str, str]:
     return {r["key"]: r["value"] for r in rows}
 
 
+def get_community_sources(conn: sqlite3.Connection,
+                          community_id: int) -> list[dict]:
+    """Return all sources for a community as [{source_type, source_id, display_name}]."""
+    rows = conn.execute(
+        "SELECT source_type, source_id, display_name, config_json "
+        "FROM community_sources WHERE community_id = ? ORDER BY added_at",
+        (community_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_community_channel_ids(conn: sqlite3.Connection, community_id: int) -> list[str]:
-    """Return the list of channel_ids for a community."""
+    """Return all source_ids for a community (all platforms combined).
+
+    Queries community_sources first; falls back to legacy community_channels
+    table if community_sources is empty (pre-migration databases).
+    """
+    rows = conn.execute(
+        "SELECT source_id FROM community_sources WHERE community_id = ?",
+        (community_id,),
+    ).fetchall()
+    if rows:
+        return [r["source_id"] for r in rows]
+    # Fallback for pre-migration databases
     rows = conn.execute(
         "SELECT channel_id FROM community_channels WHERE community_id = ?",
         (community_id,),

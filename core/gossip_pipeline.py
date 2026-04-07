@@ -11,6 +11,7 @@ import logging
 from .db import get_db, get_all_settings
 from . import gossip_collect, gossip_summarize, gossip_aggregate, gossip_analyze, gossip_report
 from . import gossip_themes
+from .engagement import normalize_engagement
 
 log = logging.getLogger(__name__)
 
@@ -93,10 +94,11 @@ def run_collect_only(db_path: str, community_id: int, run_id: int):
     """Run Step 1 only (comment collection). No LLM calls."""
     conn = get_db(db_path)
     try:
-        _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")
+        progress = _make_progress(conn, run_id)
+        _update_run(conn, run_id, "collecting", "Fetching comments...")
         log.info(f"[Run {run_id}] Collect-only: fetching comments")
-        gossip_collect.collect_community(conn, community_id,
-                                         progress_callback=_make_progress(conn, run_id))
+        gossip_collect.collect_community(conn, community_id, progress_callback=progress)
+        normalize_engagement(conn, community_id)
         conn.execute(
             "UPDATE gossip_runs SET status = 'complete', current_step = 'complete', "
             "completed_at = datetime('now') WHERE id = ?",
@@ -165,9 +167,10 @@ def run_local_steps(db_path: str, community_id: int, run_id: int):
             progress(f"info\tPrevious run finished — starting local steps")
 
         # Step 1: Collect (always local)
-        _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")
+        _update_run(conn, run_id, "collecting", "Fetching comments...")
         log.info(f"[Run {run_id}] Local steps — Step 1: Collecting")
         gossip_collect.collect_community(conn, community_id, progress_callback=progress)
+        normalize_engagement(conn, community_id)
 
         # Step 2: Summarize — only if local
         if summarize_backend != "ollama":
@@ -347,9 +350,10 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
         progress = _make_progress(conn, run_id)
 
         # Step 1: Collect comments
-        _update_run(conn, run_id, "collecting", "Fetching YouTube comments...")
+        _update_run(conn, run_id, "collecting", "Fetching comments...")
         log.info(f"[Run {run_id}] Step 1: Collecting comments")
         gossip_collect.collect_community(conn, community_id, progress_callback=progress)
+        normalize_engagement(conn, community_id)
 
         # Step 2: Summarize (LLM)
         _update_run(conn, run_id, "summarizing", "Extracting gossip with LLM...")

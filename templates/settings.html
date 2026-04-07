@@ -95,10 +95,54 @@
     </div>
 
     <div class="settings-section">
+        <h2>Reddit API</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="reddit_client_id">Client ID</label>
+                <input type="text" id="reddit_client_id" name="reddit_client_id" value="{{ settings.reddit_client_id }}" placeholder="e.g. abc123def456">
+            </div>
+            <div class="form-group">
+                <label for="reddit_client_secret">Client Secret</label>
+                <input type="password" id="reddit_client_secret" name="reddit_client_secret" value="{{ settings.reddit_client_secret }}" placeholder="secret...">
+            </div>
+            <div class="form-group">
+                <label for="reddit_user_agent">User Agent</label>
+                <input type="text" id="reddit_user_agent" name="reddit_user_agent" value="{{ settings.reddit_user_agent }}">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max_posts_per_subreddit">Max Posts per Subreddit</label>
+                <input type="number" id="max_posts_per_subreddit" name="max_posts_per_subreddit" value="{{ settings.max_posts_per_subreddit }}">
+            </div>
+            <div class="form-group">
+                <label for="reddit_post_sort">Post Sort</label>
+                <select id="reddit_post_sort" name="reddit_post_sort">
+                    <option value="hot" {% if settings.reddit_post_sort == 'hot' %}selected{% endif %}>Hot</option>
+                    <option value="new" {% if settings.reddit_post_sort == 'new' %}selected{% endif %}>New</option>
+                    <option value="top" {% if settings.reddit_post_sort == 'top' %}selected{% endif %}>Top</option>
+                    <option value="rising" {% if settings.reddit_post_sort == 'rising' %}selected{% endif %}>Rising</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="reddit_time_filter">Time Filter (for Top)</label>
+                <select id="reddit_time_filter" name="reddit_time_filter">
+                    <option value="day" {% if settings.reddit_time_filter == 'day' %}selected{% endif %}>Day</option>
+                    <option value="week" {% if settings.reddit_time_filter == 'week' %}selected{% endif %}>Week</option>
+                    <option value="month" {% if settings.reddit_time_filter == 'month' %}selected{% endif %}>Month</option>
+                    <option value="year" {% if settings.reddit_time_filter == 'year' %}selected{% endif %}>Year</option>
+                    <option value="all" {% if settings.reddit_time_filter == 'all' %}selected{% endif %}>All Time</option>
+                </select>
+            </div>
+        </div>
+        <small>Create a "script" app at <a href="https://www.reddit.com/prefs/apps" target="_blank">reddit.com/prefs/apps</a> to get credentials. Required for Reddit subreddit collection.</small>
+    </div>
+
+    <div class="settings-section">
         <h2>Gossip Collection</h2>
         <div class="form-row">
             <div class="form-group">
-                <label for="max_comments_per_video">Max Comments per Video</label>
+                <label for="max_comments_per_video">Max Comments per Post/Video</label>
                 <input type="number" id="max_comments_per_video" name="max_comments_per_video" value="{{ settings.max_comments_per_video }}">
             </div>
             <div class="form-group">

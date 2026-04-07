@@ -36,11 +36,14 @@ def _get_pending_videos(conn, channel_ids: list[str],
       - new comments arrived after last_comment_published_at
 
     force=True: all videos that have at least one comment.
+
+    Returns dicts with source_type included (defaults to 'youtube' for old rows).
     """
     placeholders = ",".join("?" * len(channel_ids))
     if force:
         q = f"""
-            SELECT v.video_id, v.channel_id, v.title, v.published_at
+            SELECT v.video_id, v.channel_id, v.title, v.published_at,
+                   COALESCE(v.source_type, 'youtube') AS source_type
             FROM videos v
             WHERE v.channel_id IN ({placeholders})
               AND EXISTS (SELECT 1 FROM comments c WHERE c.video_id = v.video_id)
@@ -49,7 +52,8 @@ def _get_pending_videos(conn, channel_ids: list[str],
         return [dict(r) for r in conn.execute(q, channel_ids).fetchall()]
 
     q = f"""
-        SELECT v.video_id, v.channel_id, v.title, v.published_at
+        SELECT v.video_id, v.channel_id, v.title, v.published_at,
+               COALESCE(v.source_type, 'youtube') AS source_type
         FROM videos v
         LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
         WHERE v.channel_id IN ({placeholders})
@@ -85,32 +89,49 @@ def _load_comments(conn, video_id: str) -> list[dict]:
 # ── Batch construction ─────────────────────────────────────────────────────────
 
 def _format_video_block(video_id: str, channel_id: str,
-                        title: str, comments: list[dict]) -> str:
-    """Format one video as a labelled block for inclusion in a batch prompt."""
-    lines = [
-        f"=== VIDEO: {video_id} ===",
-        f"CHANNEL: {channel_id}",
-        f"TITLE: {title}",
-        f"COMMENTS ({len(comments)} total):",
-        "",
-    ]
-    for c in comments:
-        prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
-        lines.append(
-            f"{prefix}[id={c['comment_id']} likes={c['like_count']}] "
-            f"{c['author_name']}: {c['text']}"
-        )
+                        title: str, comments: list[dict],
+                        source_type: str = "youtube") -> str:
+    """Format one video/post as a labelled block for inclusion in a batch prompt."""
+    if source_type == "reddit":
+        lines = [
+            f"=== REDDIT POST: {video_id} ===",
+            f"SUBREDDIT: {channel_id}",
+            f"TITLE: {title}",
+            f"COMMENTS ({len(comments)} total):",
+            "",
+        ]
+        for c in comments:
+            prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
+            lines.append(
+                f"{prefix}[id={c['comment_id']} score={c['like_count']}] "
+                f"{c['author_name']}: {c['text']}"
+            )
+    else:
+        lines = [
+            f"=== VIDEO: {video_id} ===",
+            f"CHANNEL: {channel_id}",
+            f"TITLE: {title}",
+            f"COMMENTS ({len(comments)} total):",
+            "",
+        ]
+        for c in comments:
+            prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
+            lines.append(
+                f"{prefix}[id={c['comment_id']} likes={c['like_count']}] "
+                f"{c['author_name']}: {c['text']}"
+            )
     lines.append("")
     return "\n".join(lines)
 
 
-# VideoItem = (video_id, channel_id, title, comments, max_published_at, block_text)
-_VI_ID    = 0
-_VI_CID   = 1
-_VI_TITLE = 2
-_VI_COMMS = 3
-_VI_MAXDT = 4
-_VI_BLOCK = 5
+# VideoItem = (video_id, channel_id, title, comments, max_published_at, block_text, source_type)
+_VI_ID     = 0
+_VI_CID    = 1
+_VI_TITLE  = 2
+_VI_COMMS  = 3
+_VI_MAXDT  = 4
+_VI_BLOCK  = 5
+_VI_STYPE  = 6
 
 
 def _build_batches(video_items: list[tuple], buffer_chars: int) -> list[list[tuple]]:
@@ -264,12 +285,14 @@ def summarize_community(conn, community_id: int,
             continue
         dates = [c["published_at"] for c in comments if c.get("published_at")]
         max_pub = max(dates) if dates else None
+        stype = v.get("source_type", "youtube")
         block = _format_video_block(
-            v["video_id"], v["channel_id"], v.get("title", ""), comments
+            v["video_id"], v["channel_id"], v.get("title", ""), comments,
+            source_type=stype,
         )
         video_items.append((
             v["video_id"], v["channel_id"], v.get("title", ""),
-            comments, max_pub, block,
+            comments, max_pub, block, stype,
         ))
 
     if not video_items:

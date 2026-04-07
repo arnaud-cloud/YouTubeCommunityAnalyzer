@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS communities (
     created_at      TEXT DEFAULT (datetime('now'))
 );
 
+-- Legacy table — kept for backward compat; new code writes community_sources.
 CREATE TABLE IF NOT EXISTS community_channels (
     community_id    INTEGER NOT NULL,
     channel_id      TEXT NOT NULL,
@@ -16,6 +17,19 @@ CREATE TABLE IF NOT EXISTS community_channels (
     PRIMARY KEY (community_id, channel_id),
     FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
     FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
+);
+
+-- Multi-platform source registry
+CREATE TABLE IF NOT EXISTS community_sources (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    community_id    INTEGER NOT NULL,
+    source_type     TEXT NOT NULL DEFAULT 'youtube',  -- 'youtube' | 'reddit' | ...
+    source_id       TEXT NOT NULL,                    -- channel_id for YT, 'r/name' for Reddit
+    display_name    TEXT DEFAULT '',
+    config_json     TEXT DEFAULT '{}',
+    added_at        TEXT DEFAULT (datetime('now')),
+    UNIQUE(community_id, source_type, source_id),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
 );
 
 -- ═══ CHANNELS (shared by tracker + gossip) ════════════════════════════════════
@@ -65,6 +79,7 @@ CREATE TABLE IF NOT EXISTS videos (
     privacy_status      TEXT DEFAULT '',
     comment_count       INTEGER DEFAULT 0,
     collected_at        TEXT,
+    source_type         TEXT DEFAULT 'youtube',
     FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
 );
 
@@ -83,17 +98,19 @@ CREATE TABLE IF NOT EXISTS video_snapshots (
 -- ═══ GOSSIP DATA ══════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS comments (
-    comment_id          TEXT PRIMARY KEY,
-    video_id            TEXT NOT NULL,
-    channel_id          TEXT NOT NULL,
-    author_name         TEXT,
-    author_channel_id   TEXT,
-    text                TEXT,
-    like_count          INTEGER DEFAULT 0,
-    published_at        TEXT,
-    is_reply            INTEGER DEFAULT 0,
-    parent_id           TEXT,
-    collected_at        TEXT DEFAULT (datetime('now')),
+    comment_id              TEXT PRIMARY KEY,
+    video_id                TEXT NOT NULL,
+    channel_id              TEXT NOT NULL,
+    author_name             TEXT,
+    author_channel_id       TEXT,
+    text                    TEXT,
+    like_count              INTEGER DEFAULT 0,
+    published_at            TEXT,
+    is_reply                INTEGER DEFAULT 0,
+    parent_id               TEXT,
+    collected_at            TEXT DEFAULT (datetime('now')),
+    source_type             TEXT DEFAULT 'youtube',
+    engagement_normalized   REAL,
     FOREIGN KEY (video_id) REFERENCES videos(video_id)
 );
 
@@ -244,3 +261,5 @@ CREATE INDEX IF NOT EXISTS idx_gossip_channel           ON gossip_items(channel_
 CREATE INDEX IF NOT EXISTS idx_entity_canonical         ON entity_mentions(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entity_channel           ON entity_mentions(channel_id);
 CREATE INDEX IF NOT EXISTS idx_gossip_runs_community    ON gossip_runs(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_sources_cid    ON community_sources(community_id);
+-- idx_comments_source_type is created in _migrate() after the column is added

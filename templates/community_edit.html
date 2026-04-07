@@ -9,7 +9,7 @@
 <form method="POST" class="form-card">
     <div class="form-group">
         <label for="name">Community Name</label>
-        <input type="text" id="name" name="name" value="{{ community.name if community else '' }}" required placeholder="e.g. French Nonduality YouTube">
+        <input type="text" id="name" name="name" value="{{ community.name if community else '' }}" required placeholder="e.g. French Nonduality">
     </div>
     <div class="form-group">
         <label for="description">Description (optional)</label>
@@ -20,40 +20,58 @@
 
 {% if community %}
 <div class="section">
-    <h2>Channels ({{ channels|length }})</h2>
+    <div class="section-header" style="display:flex;align-items:center;gap:1rem;">
+        <h2>Sources ({{ sources|length }})</h2>
+        <a href="{{ url_for('discovery.discovery_page') }}?community_id={{ community.id }}" class="btn btn-sm btn-secondary">+ Discover Sources</a>
+    </div>
 
-    <form method="POST" action="{{ url_for('community.add_channel', community_id=community.id) }}" class="inline-form">
-        <input type="text" name="identifier" placeholder="@handle or UCxxxxxx" required>
-        <button type="submit" class="btn btn-primary">Add Channel</button>
+    <form method="POST" action="{{ url_for('community.add_source', community_id=community.id) }}" class="inline-form" style="gap:0.5rem;">
+        <select name="source_type" id="source_type_select" style="min-width:9rem;">
+            <option value="youtube">YouTube</option>
+            <option value="reddit">Reddit</option>
+        </select>
+        <input type="text" name="identifier" id="source_identifier"
+               placeholder="@handle or UCxxxxxx" required style="flex:1;">
+        <button type="submit" class="btn btn-primary">Add</button>
     </form>
 
-    {% if channels %}
+    {% if sources %}
     <table class="data-table">
         <thead>
             <tr>
-                <th></th>
-                <th>Channel</th>
-                <th>Handle</th>
+                <th style="width:2rem;"></th>
+                <th style="width:4rem;">Type</th>
+                <th>Name</th>
+                <th>Handle / ID</th>
                 <th>Subscribers</th>
                 <th>Added</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            {% for ch in channels %}
+            {% for s in sources %}
             <tr>
                 <td>
-                    {% if ch.thumbnail_url %}
-                    <img src="{{ ch.thumbnail_url }}" alt="" class="channel-thumb">
+                    {% if s.thumbnail_url %}
+                    <img src="{{ s.thumbnail_url }}" alt="" class="channel-thumb">
                     {% endif %}
                 </td>
-                <td>{{ ch.channel_name }}</td>
-                <td class="muted">{{ ch.handle or '' }}</td>
-                <td>{{ "{:,}".format(ch.subscriber_count or 0) }}</td>
-                <td class="muted">{{ (ch.added_at or '')[:10] }}</td>
                 <td>
-                    <form method="POST" action="{{ url_for('community.remove_channel', community_id=community.id, channel_id=ch.channel_id) }}" style="display:inline">
-                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remove this channel?')">Remove</button>
+                    {% if s.source_type == 'reddit' %}
+                    <span class="badge badge-reddit">Reddit</span>
+                    {% else %}
+                    <span class="badge badge-youtube">YouTube</span>
+                    {% endif %}
+                </td>
+                <td>{{ s.name }}</td>
+                <td class="muted">{{ s.handle or s.source_id }}</td>
+                <td>{{ "{:,}".format(s.subscriber_count or 0) if s.subscriber_count else '—' }}</td>
+                <td class="muted">{{ (s.added_at or '')[:10] }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('community.remove_source', community_id=community.id) }}" style="display:inline">
+                        <input type="hidden" name="source_type" value="{{ s.source_type }}">
+                        <input type="hidden" name="source_id" value="{{ s.source_id }}">
+                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remove this source?')">Remove</button>
                     </form>
                 </td>
             </tr>
@@ -61,7 +79,7 @@
         </tbody>
     </table>
     {% else %}
-    <p class="muted">No channels yet. Add some above.</p>
+    <p class="muted">No sources yet. Add a YouTube channel or Reddit subreddit above, or use "Discover Sources".</p>
     {% endif %}
 </div>
 
@@ -72,4 +90,21 @@
     </form>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Update placeholder text based on source type selection
+const sel = document.getElementById('source_type_select');
+const inp = document.getElementById('source_identifier');
+if (sel && inp) {
+    sel.addEventListener('change', () => {
+        if (sel.value === 'reddit') {
+            inp.placeholder = 'r/subredditname';
+        } else {
+            inp.placeholder = '@handle or UCxxxxxx';
+        }
+    });
+}
+</script>
 {% endblock %}
