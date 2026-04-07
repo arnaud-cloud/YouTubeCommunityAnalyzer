@@ -40,8 +40,10 @@ def _esc(s) -> str:
 # Data gathering
 # ---------------------------------------------------------------------------
 
-def _gather_data(conn, community_id: int) -> dict:
-    """Pull together all data the LLM needs for the executive summary."""
+def _gather_data(conn, community_id: int, min_evidence: int = 0) -> dict:
+    """Pull together all data the LLM needs for the executive summary.
+    When min_evidence > 0, themes are filtered to those with at least that
+    many supporting comments."""
     channel_ids = get_community_channel_ids(conn, community_id)
     if not channel_ids:
         raise ValueError("Community has no channels.")
@@ -69,10 +71,10 @@ def _gather_data(conn, community_id: int) -> dict:
     for row in conn.execute(
         """SELECT title, description, gossip_type, subjects, activity_json,
                   first_seen_at, last_seen_at, total_evidence
-           FROM themes WHERE community_id = ?
+           FROM themes WHERE community_id = ? AND total_evidence >= ?
            ORDER BY last_seen_at DESC, total_evidence DESC
            LIMIT 20""",
-        (community_id,),
+        (community_id, min_evidence),
     ).fetchall():
         t = dict(row)
         t["subjects"] = _safe_json(t["subjects"], [])
@@ -108,7 +110,7 @@ def _gather_data(conn, community_id: int) -> dict:
     }
 
 
-def _build_llm_payload(data: dict) -> str:
+def _build_llm_payload(data: dict, min_evidence: int = 0) -> str:
     """Build the user prompt for the LLM from gathered data."""
     channel_display = [
         data["channel_names"].get(ch, ch) for ch in data["channel_ids"]
@@ -143,6 +145,13 @@ def _build_llm_payload(data: dict) -> str:
         "community_trends": trends,
         "persona_vs_reality": persona,
     }
+    if min_evidence > 0:
+        payload["NOTE"] = (
+            f"All themes and stories below have been pre-filtered to those with "
+            f"at least {min_evidence} supporting comments. These are HIGH-CONFIDENCE "
+            f"findings only. Reflect this confidence level in your writing — use "
+            f"assertive language rather than hedging."
+        )
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -214,16 +223,18 @@ def _trend_color(trend: str) -> str:
     )
 
 
-def _render_html(result: dict, community_name: str, date_range: str) -> str:
+def _render_html(result: dict, community_name: str, date_range: str,
+                  title: str = "Executive Summary", subtitle: str = "") -> str:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    sub_html = f'<br><span style="font-size:.85rem;color:#9090b0">{_esc(subtitle)}</span>' if subtitle else ""
     parts = [
         '<!DOCTYPE html>\n<html lang="en">\n<head>\n'
         '<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1.0">\n'
-        f'<title>Executive Summary — {_esc(community_name)}</title>\n'
+        f'<title>{_esc(title)} — {_esc(community_name)}</title>\n'
         f'<style>{_CSS}</style>\n</head>\n<body>\n'
         '<div class="container">\n'
-        f'<h1>Executive Summary</h1>\n'
+        f'<h1>{_esc(title)}</h1>{sub_html}\n'
         f'<p class="meta">{_esc(community_name)} | {_esc(date_range)} | Generated: {ts}</p>\n'
     ]
 
@@ -303,10 +314,16 @@ def _render_html(result: dict, community_name: str, date_range: str) -> str:
 # ---------------------------------------------------------------------------
 
 def generate_executive_summary(conn, community_id: int,
+                               min_evidence: int = 0,
+                               title: str = "Executive Summary",
+                               subtitle: str = "",
                                progress_callback=None) -> str:
     """
     Generate an executive summary HTML string for a community.
     Calls the LLM (analyze backend) to synthesise data into a briefing.
+
+    When min_evidence > 0, only themes with at least that many supporting
+    comments are included (used by the "Top Insights" variant).
     """
     def _cb(msg):
         if progress_callback:
@@ -314,7 +331,7 @@ def generate_executive_summary(conn, community_id: int,
         log.info(msg)
 
     _cb("Gathering data for executive summary...")
-    data = _gather_data(conn, community_id)
+    data = _gather_data(conn, community_id, min_evidence=min_evidence)
 
     _cb("Calling LLM for executive summary synthesis...")
     settings = get_all_settings(conn)
@@ -322,7 +339,7 @@ def generate_executive_summary(conn, community_id: int,
     llm = LLMClient(cfg, role="analyze")
 
     system_prompt = PROMPT_PATH.read_text(encoding="utf-8")
-    user_prompt = _build_llm_payload(data)
+    user_prompt = _build_llm_payload(data, min_evidence=min_evidence)
 
     result = llm.complete_json(system_prompt, user_prompt,
                                max_tokens=llm.max_tokens_analyze)
@@ -332,5 +349,23 @@ def generate_executive_summary(conn, community_id: int,
         f"{data['agg_meta'].get('date_range_end', '?')}"
     )
     _cb("Rendering executive summary HTML...")
-    html = _render_html(result, data["community"]["name"], date_range)
+    html = _render_html(result, data["community"]["name"], date_range,
+                        title=title, subtitle=subtitle)
     return html
+
+
+def generate_top_insights(conn, community_id: int,
+                          min_evidence: int = 5,
+                          progress_callback=None) -> str:
+    """
+    Generate a "Top Insights" report — same structure as the executive
+    summary but restricted to themes/stories with at least *min_evidence*
+    supporting comments.
+    """
+    return generate_executive_summary(
+        conn, community_id,
+        min_evidence=min_evidence,
+        title="Top Insights",
+        subtitle=f"Filtered to items with {min_evidence}+ supporting comments",
+        progress_callback=progress_callback,
+    )
