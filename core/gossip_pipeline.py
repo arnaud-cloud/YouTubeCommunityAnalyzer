@@ -273,6 +273,57 @@ def run_force_summarize(db_path: str, community_id: int, run_id: int):
         conn.close()
 
 
+def run_reanalyze(db_path: str, community_id: int, run_id: int):
+    """
+    Re-run aggregate → analyze → report (+ themes), skipping collect
+    and summarize.  Useful after changing entity aliases or other config
+    that doesn't require re-processing comments.
+    """
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+
+        # Step 1: Aggregate
+        _update_run(conn, run_id, "aggregating", "Re-aggregating metrics...")
+        log.info(f"[Run {run_id}] Re-analyze — Step 1: Aggregating")
+        agg_id = gossip_aggregate.aggregate_community(
+            conn, community_id, progress_callback=progress
+        )
+
+        # Step 2: Analyze (LLM)
+        _update_run(conn, run_id, "analyzing", "Running LLM narrative synthesis...")
+        log.info(f"[Run {run_id}] Re-analyze — Step 2: Analyzing")
+        analysis_id = gossip_analyze.analyze_aggregation(
+            conn, agg_id, progress_callback=progress
+        )
+
+        # Step 3: Report
+        _update_run(conn, run_id, "reporting", "Generating report...")
+        conn.execute(
+            "UPDATE gossip_runs SET analysis_id = ? WHERE id = ?",
+            (analysis_id, run_id),
+        )
+        conn.commit()
+        log.info(f"[Run {run_id}] Re-analyze — Step 3: Generating report")
+        gossip_report.generate_report_html(conn, analysis_id)
+
+        _complete_run(conn, run_id, analysis_id)
+        log.info(f"[Run {run_id}] Re-analyze complete. Analysis ID: {analysis_id}")
+
+        # Auto-recompute themes
+        try:
+            n = gossip_themes.compute_themes(conn, community_id, use_llm=False)
+            log.info(f"[Run {run_id}] Auto-computed {n} themes.")
+        except Exception as te:
+            log.warning(f"[Run {run_id}] Theme auto-recompute failed (non-fatal): {te}")
+
+    except Exception as e:
+        log.error(f"[Run {run_id}] Re-analyze failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
 def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
     """
     Execute the full 5-step gossip pipeline.

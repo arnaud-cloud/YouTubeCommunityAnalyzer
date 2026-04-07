@@ -86,6 +86,10 @@
             {% endif %}
             <button type="submit" class="btn btn-outline">Force Re-summarize</button>
         </form>
+        <form method="POST" action="{{ url_for('gossip.start_reanalyze', community_id=community.id) }}">
+            <p style="margin-bottom:.5rem;color:var(--muted);font-size:.9rem">Re-aggregate + analyze + report. Skips collect &amp; summarize. Use after changing aliases or config.</p>
+            <button type="submit" class="btn btn-outline">Re-analyze Only</button>
+        </form>
     </div>
     {% endif %}
 </div>

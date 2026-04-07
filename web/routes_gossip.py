@@ -6,7 +6,7 @@ import threading
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
 from core.db import get_db, get_all_settings, get_community_channel_ids
-from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize
+from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize, run_reanalyze
 from core.gossip_report import generate_report_html
 from core.executive_summary import (
     generate_executive_summary, generate_top_insights,
@@ -273,6 +273,35 @@ def start_force_summarize(community_id):
     )
     t.start()
     flash("Force re-summarize started — all videos will be reprocessed.", "success")
+    return redirect(url_for("gossip.runs", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/reanalyze", methods=["POST"])
+def start_reanalyze(community_id):
+    conn = get_db(current_app.config["DB_PATH"])
+    active = conn.execute(
+        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active:
+        conn.close()
+        flash("A pipeline is already running for this community.", "error")
+        return redirect(url_for("gossip.runs", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(
+        target=run_reanalyze, args=(db_path, community_id, run_id), daemon=True
+    )
+    t.start()
+    flash("Re-analyze started — aggregate + analyze + report (no collect/summarize).", "success")
     return redirect(url_for("gossip.runs", community_id=community_id))
 
 
