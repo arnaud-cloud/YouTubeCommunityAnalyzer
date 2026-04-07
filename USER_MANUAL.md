@@ -13,6 +13,7 @@
 9. [Database Reference](#9-database-reference)
 10. [Recommended Workflows](#10-recommended-workflows)
 11. [Troubleshooting](#11-troubleshooting)
+12. [Gossip Theme Tracker](#12-gossip-theme-tracker)
 
 ---
 
@@ -463,3 +464,132 @@ Channel Age is based on the **oldest video currently in the database**, not the 
 
 ### Import from HobbyTracker: channel not linked to a community
 The import script only adds data to the database. Use **Community → Manage** to assign imported channels to the appropriate communities.
+
+---
+
+## 12. Gossip Theme Tracker
+
+**URL:** `/themes/<community_id>`
+
+### 12.1 What is a Theme?
+
+A **theme** is a persistent, named narrative thread that spans multiple videos and channels — for example "The Alice vs Bob rivalry", "X's fake persona allegations", or "The failed collab drama". Instead of seeing gossip scattered across individual video reports, the Theme Tracker lets you follow a story from its first whisper to its most recent flare-up.
+
+Each theme shows:
+- A human-readable title and a brief description of the narrative arc (when LLM is enabled)
+- The people/channels involved
+- A monthly activity chart showing when the community was talking about it most
+- The original comments that first surfaced the story
+- The most recent comments still discussing it
+
+### 12.2 Prerequisites
+
+Themes are built on top of gossip items. Before using this feature you need:
+
+1. **At least one completed gossip pipeline run** for the community — specifically Steps 1 + 2 (collect + summarize). The theme tracker reads from the `gossip_items` table, which the summarize step populates.
+2. **No additional API key** is required for the basic rule-based view. An Anthropic or Ollama key is only needed for LLM-enhanced titles and descriptions (see §12.4).
+
+If no pipeline has ever run, the Themes page shows an empty state with a prompt to run the pipeline first.
+
+### 12.3 How to Access
+
+**From the navigation bar:** A **Themes** link appears in the top nav alongside *Gossip* and *Tracker*. It opens a community selector, or goes directly to the browse page if accessed from within a community context.
+
+**From the Gossip Runs page:** Once any pipeline run has completed, a **View Themes** button appears next to the report link. It goes directly to the Themes browse page for that community.
+
+**Direct URL:** `/themes/<community_id>`
+
+### 12.4 Computing Themes
+
+Themes are calculated on demand — they are not computed automatically when the app starts.
+
+#### Automatic (after every pipeline run)
+
+When a full gossip pipeline run completes, a fast rule-based recompute is triggered automatically in the background. It adds only a few seconds and requires no LLM call. Themes are immediately browsable once the run finishes.
+
+#### Manual recompute
+
+A **Recompute Themes** button sits in the top-right corner of the browse page. Click it at any time. A progress indicator shows while it runs (typically 5–30 seconds).
+
+Reasons to recompute manually:
+- You want LLM-enhanced titles and descriptions (automatic recompute skips this)
+- You changed entity aliases in Settings and want the new canonical names applied
+- You imported historical comments outside the normal pipeline
+
+#### Rule-based vs. LLM-enhanced
+
+| Mode | Titles | Cluster merging | Cost |
+|------|--------|-----------------|------|
+| Rule-based (default) | Auto-generated: "Alice & Bob — drama" | Exact match only | Free, no API calls |
+| LLM-enhanced (manual) | Human-readable: "The Alice vs Bob Feud" | Semantic deduplication of near-identical clusters | Uses the **analyze** LLM backend (Anthropic or Ollama, as configured in Settings) |
+
+The LLM pass uses the same model configured for narrative synthesis (`llm_analyze_backend` / `llm_analyze_anthropic_model`).
+
+### 12.5 The Browse Page
+
+**URL:** `/themes/<community_id>`
+
+**Most Recently Active strip** — At the top, a horizontally scrollable row of 5–8 cards shows the themes with the freshest community activity. Each card includes a mini sparkline (last 12 months of comment counts) to spot which stories are heating up vs. fading.
+
+**Filter bar** — Narrow the grid by gossip type (drama · relationship · collaboration · reputation · irl\_vs\_persona · trend) or by typing a subject name.
+
+**Theme card grid** — All themes for the community, sorted by most recently active first. Each card shows:
+
+| Element | What it means |
+|---------|--------------|
+| Gossip type badge | Color-coded category |
+| Title | Human name (LLM) or auto-generated |
+| Subject pills | The people or channels the theme is about |
+| Sparkline | Monthly activity over the theme's lifetime |
+| Date range | "First seen: Mar 2024 · Last seen: Nov 2024" |
+| Evidence count | Total backing comments |
+
+Clicking a card opens the Theme Detail page.
+
+### 12.6 The Theme Detail Page
+
+**URL:** `/themes/detail/<theme_id>`
+
+**Header** — Title, LLM-generated description (if available), subject pills, gossip type badge.
+
+**Stats row** — First seen date · Last seen date · Total evidence comments · Channels involved.
+
+**Activity Timeline** — A full monthly bar chart for the entire lifespan of the theme. Answers: *When did this story peak? Did it resurface after dying down? Is it still active?* Uses the same dark-theme SVG style as the main gossip reports.
+
+**Origin Story** — The 5 earliest evidence comments in chronological order. Each entry shows the date, channel, author, like count, full comment text (expandable), and the gossip claim the pipeline extracted from it. Answers: *How did this story start, and where?*
+
+**Recent Activity** — The 10 most recent evidence comments, newest first. Same format as Origin Story. Answers: *What is the community saying about it right now?*
+
+**Full Timeline** — A collapsible section with all gossip items in chronological order, grouped by month. Each month lists extracted claims and comment excerpts. Useful for tracing the complete arc of a long-running story.
+
+### 12.7 Persistence Across Restarts
+
+**Yes — themes are fully persistent.**
+
+Themes are stored in the `themes` table in the same SQLite database as all other app data (`community_analyzer.db`). They survive:
+- App restarts and server reboots
+- New pipeline runs (themes are only overwritten when you recompute them explicitly or a pipeline run finishes)
+
+The only way to lose theme data is to delete the database file entirely, which would also delete all comments, gossip items, and reports.
+
+#### What recomputing does to existing data
+
+Recomputing themes replaces all themes for the current community. Themes for other communities are unaffected. The source data (gossip_items, comments) is never modified.
+
+### 12.8 Troubleshooting
+
+**Themes page is empty after a pipeline run.**
+The automatic post-pipeline recompute may have been interrupted. Click **Recompute Themes** manually.
+
+**Titles look like "Alice & Bob — drama" instead of something descriptive.**
+You are in rule-based mode. Click **Recompute Themes** with an LLM backend configured in Settings.
+
+**Two themes appear to be about the same story.**
+In rule-based mode, clusters are grouped by exact subject name match. If the LLM extracted slightly different names for the same person across videos, they become separate clusters. An LLM-enhanced recompute detects the semantic overlap and merges them.
+
+**I changed entity aliases in Settings but themes still show old names.**
+Aliases are applied only when themes are recomputed. Click **Recompute Themes**.
+
+**Will recomputing cost me money?**
+Rule-based recompute (default, triggered after every pipeline run): no API calls, no cost.
+LLM-enhanced recompute: uses the analyze LLM backend. If set to Anthropic, Claude will be billed per-token at the rate for your configured model (same model used for narrative synthesis).

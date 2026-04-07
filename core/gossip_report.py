@@ -506,7 +506,7 @@ def _build_markdown(row: dict) -> str:
     for c in a.get("corroborated_claims", [])[:15]:
         subjects = ", ".join(c.get("subjects") or [])
         occ = c.get("occurrences", 0)
-        ln(f"### {c.get('gossip_type', '').upper()} -- {subjects}",
+        ln(f"### {(c.get('gossip_type') or '').upper()} -- {subjects}",
            f"*Seen in {occ} videos*")
         for i, claim in enumerate(c.get("claims", []), 1):
             if claim: ln(f"{i}. {claim}")
