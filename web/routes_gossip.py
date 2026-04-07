@@ -655,14 +655,28 @@ def commenters(community_id):
     per_page = 50
     tier_filter = request.args.get("tier", "")
     sort_by = request.args.get("sort", "quality_score")
+    creators_only = request.args.get("creators_only", "") == "1"
     if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes", "reply_ratio"}:
         sort_by = "quality_score"
+
+    # Fetch channel owner IDs for this community
+    channel_owner_ids = [
+        r["source_id"] for r in conn.execute(
+            "SELECT source_id FROM community_sources WHERE community_id = ?",
+            (community_id,),
+        ).fetchall()
+    ]
 
     where_clauses = ["community_id = ?"]
     params: list = [community_id]
     if tier_filter in ("A", "B", "C", "D"):
         where_clauses.append("tier = ?")
         params.append(tier_filter)
+    if creators_only and channel_owner_ids:
+        where_clauses.append(
+            "author_channel_id IN (%s)" % ",".join("?" * len(channel_owner_ids))
+        )
+        params.extend(channel_owner_ids)
     where = " AND ".join(where_clauses)
 
     total = conn.execute(
@@ -692,6 +706,8 @@ def commenters(community_id):
         community=dict(community),
         commenters=[dict(r) for r in rows],
         tier_counts=tier_counts,
+        channel_owner_ids=set(channel_owner_ids),
+        creators_only=creators_only,
         page=page,
         per_page=per_page,
         total=total,

@@ -47,6 +47,10 @@
       <option value="{{ tier }}" {% if tier_filter == tier %}selected{% endif %}>Tier {{ tier }} — {{ label }}</option>
       {% endfor %}
     </select>
+    <label style="display:flex;align-items:center;gap:.4rem;font-size:.9rem;cursor:pointer">
+      <input type="checkbox" name="creators_only" value="1" {% if creators_only %}checked{% endif %} onchange="this.form.submit()">
+      Creators only
+    </label>
     <label style="font-size:.9rem;color:var(--muted)">Sort by:</label>
     <select name="sort" onchange="this.form.submit()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
       <option value="quality_score"  {% if sort_by == 'quality_score'  %}selected{% endif %}>Quality Score</option>
@@ -86,8 +90,11 @@
     {% set pct = (c.quality_score * 100) | int %}
     <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
       <td style="padding:.6rem .75rem;color:var(--muted)">{{ rank }}</td>
-      <td style="padding:.6rem .75rem;font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
+      <td style="padding:.6rem .75rem;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
         {{ c.author_name or c.author_channel_id }}
+        {% if c.author_channel_id in channel_owner_ids %}
+        <span style="font-size:.7rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .4em;margin-left:.3em;vertical-align:middle">creator</span>
+        {% endif %}
       </td>
       <td style="padding:.6rem .75rem;text-align:center">
         <span class="tier-badge tier-{{ c.tier }}">{{ c.tier }}</span>
