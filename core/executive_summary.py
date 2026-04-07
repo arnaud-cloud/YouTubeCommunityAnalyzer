@@ -195,6 +195,28 @@ h2{font-size:1.2rem;color:var(--accent);margin:2rem 0 .8rem;
 .palm-name{font-weight:bold;color:#fff}
 .palm-score{font-weight:bold;min-width:2.5rem}
 .palm-reason{color:var(--muted);font-size:.82rem}
+
+@media print{
+  :root{--bg:#fff;--surface:#f8f8f8;--border:#ccc;--text:#111;
+        --muted:#555;--accent:#4a2fbf}
+  body{background:#fff;color:#111;font-size:10pt;padding:0}
+  .container{max-width:100%;padding:0}
+  h1{font-size:16pt;color:#4a2fbf}
+  h2{font-size:12pt;color:#4a2fbf;margin:1rem 0 .5rem}
+  .meta{font-size:8pt}
+  .story{border:1px solid #ccc;background:#f8f8f8;break-inside:avoid}
+  .story-title{color:#111}
+  .story-body{color:#333}
+  .status-grid{grid-template-columns:1fr 1fr;gap:.3rem}
+  .status-card{border:1px solid #ccc;background:#f8f8f8;padding:.4rem .6rem;
+               break-inside:avoid}
+  .status-name{color:#111}
+  .status-body{color:#333}
+  .palmares{grid-template-columns:1fr 1fr}
+  .palm-name{color:#111}
+  .palm-reason{color:#333}
+  .no-print{display:none !important}
+}
 """
 
 _TYPE_COLORS = {
@@ -310,6 +332,45 @@ def _render_html(result: dict, community_name: str, date_range: str,
 
 
 # ---------------------------------------------------------------------------
+# DB caching
+# ---------------------------------------------------------------------------
+
+def _save_report(conn, community_id: int, report_type: str,
+                 min_evidence: int, html: str, llm_backend: str) -> int:
+    """Save generated HTML to executive_reports and return the row id."""
+    cur = conn.execute(
+        """INSERT INTO executive_reports
+               (community_id, report_type, min_evidence, report_html,
+                llm_backend, created_at)
+           VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+        (community_id, report_type, min_evidence, html, llm_backend),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_cached_report(conn, community_id: int, report_type: str,
+                      min_evidence: int = 0) -> dict | None:
+    """Return the latest cached report for (community, type, min_evidence),
+    or None if no cached version exists."""
+    row = conn.execute(
+        """SELECT * FROM executive_reports
+           WHERE community_id = ? AND report_type = ? AND min_evidence = ?
+           ORDER BY id DESC LIMIT 1""",
+        (community_id, report_type, min_evidence),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def get_report_by_id(conn, report_id: int) -> dict | None:
+    """Load a specific cached report by its id."""
+    row = conn.execute(
+        "SELECT * FROM executive_reports WHERE id = ?", (report_id,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -317,10 +378,11 @@ def generate_executive_summary(conn, community_id: int,
                                min_evidence: int = 0,
                                title: str = "Executive Summary",
                                subtitle: str = "",
-                               progress_callback=None) -> str:
+                               report_type: str = "executive_summary",
+                               progress_callback=None) -> dict:
     """
-    Generate an executive summary HTML string for a community.
-    Calls the LLM (analyze backend) to synthesise data into a briefing.
+    Generate an executive summary, save it to DB, and return
+    {"id": <report_id>, "html": <html_string>}.
 
     When min_evidence > 0, only themes with at least that many supporting
     comments are included (used by the "Top Insights" variant).
@@ -351,12 +413,16 @@ def generate_executive_summary(conn, community_id: int,
     _cb("Rendering executive summary HTML...")
     html = _render_html(result, data["community"]["name"], date_range,
                         title=title, subtitle=subtitle)
-    return html
+
+    report_id = _save_report(conn, community_id, report_type,
+                             min_evidence, html, llm.backend)
+    _cb(f"Report saved (id={report_id}).")
+    return {"id": report_id, "html": html}
 
 
 def generate_top_insights(conn, community_id: int,
                           min_evidence: int = 5,
-                          progress_callback=None) -> str:
+                          progress_callback=None) -> dict:
     """
     Generate a "Top Insights" report — same structure as the executive
     summary but restricted to themes/stories with at least *min_evidence*
@@ -367,5 +433,6 @@ def generate_top_insights(conn, community_id: int,
         min_evidence=min_evidence,
         title="Top Insights",
         subtitle=f"Filtered to items with {min_evidence}+ supporting comments",
+        report_type="top_insights",
         progress_callback=progress_callback,
     )

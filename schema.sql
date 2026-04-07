@@ -206,6 +206,21 @@ CREATE TABLE IF NOT EXISTS themes (
 CREATE INDEX IF NOT EXISTS idx_themes_community  ON themes(community_id);
 CREATE INDEX IF NOT EXISTS idx_themes_last_seen  ON themes(last_seen_at);
 
+-- ═══ EXECUTIVE REPORTS (cached LLM-generated summaries) ══════════════════════
+
+CREATE TABLE IF NOT EXISTS executive_reports (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    community_id    INTEGER NOT NULL,
+    report_type     TEXT NOT NULL DEFAULT 'executive_summary',
+    min_evidence    INTEGER NOT NULL DEFAULT 0,
+    report_html     TEXT NOT NULL,
+    llm_backend     TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_exec_reports_community ON executive_reports(community_id);
+
 -- ═══ SETTINGS ═════════════════════════════════════════════════════════════════
 
 CREATE TABLE IF NOT EXISTS settings (

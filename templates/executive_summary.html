@@ -3,9 +3,18 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Executive Summary</h1>
-    <div>
+    <h1>{{ "Top Insights" if report_type == "top_insights" else "Executive Summary" }}</h1>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
         <a href="{{ url_for('gossip.runs', community_id=community.id) }}" class="btn btn-outline">Back to Runs</a>
+        {% if report_type == "top_insights" %}
+        <a href="{{ url_for('gossip.top_insights', community_id=community.id, min_evidence=min_evidence|default(5), regenerate=1) }}" class="btn btn-outline">Regenerate</a>
+        {% else %}
+        <a href="{{ url_for('gossip.executive_summary', community_id=community.id, regenerate=1) }}" class="btn btn-outline">Regenerate</a>
+        {% endif %}
+        {% if report_id %}
+        <a href="{{ url_for('gossip.executive_report_pdf', report_id=report_id) }}" target="_blank" class="btn btn-outline" onclick="setTimeout(function(){document.querySelector('#pdf-hint').style.display='inline'},500)">Export PDF</a>
+        <span id="pdf-hint" style="display:none;font-size:.8rem;color:var(--muted);align-self:center">Use Ctrl+P → Save as PDF in the new tab</span>
+        {% endif %}
     </div>
 </div>
 

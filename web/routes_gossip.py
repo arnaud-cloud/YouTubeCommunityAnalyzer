@@ -8,7 +8,10 @@ from markupsafe import Markup
 from core.db import get_db, get_all_settings, get_community_channel_ids
 from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize
 from core.gossip_report import generate_report_html
-from core.executive_summary import generate_executive_summary, generate_top_insights
+from core.executive_summary import (
+    generate_executive_summary, generate_top_insights,
+    get_cached_report, get_report_by_id,
+)
 
 bp = Blueprint("gossip", __name__)
 
@@ -356,18 +359,31 @@ def executive_summary(community_id):
         flash("Community not found.", "error")
         return redirect(url_for("main.home"))
 
-    try:
-        html = generate_executive_summary(conn, community_id)
-    except Exception as e:
-        conn.close()
-        flash(f"Executive summary failed: {e}", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+    regenerate = request.args.get("regenerate") == "1"
+    cached = None if regenerate else get_cached_report(
+        conn, community_id, "executive_summary"
+    )
+
+    if cached:
+        report_id = cached["id"]
+        html = cached["report_html"]
+    else:
+        try:
+            result = generate_executive_summary(conn, community_id)
+            report_id = result["id"]
+            html = result["html"]
+        except Exception as e:
+            conn.close()
+            flash(f"Executive summary failed: {e}", "error")
+            return redirect(url_for("gossip.runs", community_id=community_id))
 
     conn.close()
     return render_template(
         "executive_summary.html",
         summary_html=Markup(html),
         community=dict(community),
+        report_id=report_id,
+        report_type="executive_summary",
     )
 
 
@@ -383,17 +399,44 @@ def top_insights(community_id):
         return redirect(url_for("main.home"))
 
     min_evidence = request.args.get("min_evidence", 5, type=int)
-    try:
-        html = generate_top_insights(conn, community_id,
-                                     min_evidence=min_evidence)
-    except Exception as e:
-        conn.close()
-        flash(f"Top insights failed: {e}", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+    regenerate = request.args.get("regenerate") == "1"
+    cached = None if regenerate else get_cached_report(
+        conn, community_id, "top_insights", min_evidence
+    )
+
+    if cached:
+        report_id = cached["id"]
+        html = cached["report_html"]
+    else:
+        try:
+            result = generate_top_insights(conn, community_id,
+                                           min_evidence=min_evidence)
+            report_id = result["id"]
+            html = result["html"]
+        except Exception as e:
+            conn.close()
+            flash(f"Top insights failed: {e}", "error")
+            return redirect(url_for("gossip.runs", community_id=community_id))
 
     conn.close()
     return render_template(
         "executive_summary.html",
         summary_html=Markup(html),
         community=dict(community),
+        report_id=report_id,
+        report_type="top_insights",
+        min_evidence=min_evidence,
     )
+
+
+@bp.route("/executive-report/<int:report_id>/pdf")
+def executive_report_pdf(report_id):
+    """Serve a cached executive report as a standalone HTML page for
+    browser print-to-PDF (no app chrome, just the report)."""
+    conn = get_db(current_app.config["DB_PATH"])
+    report = get_report_by_id(conn, report_id)
+    conn.close()
+    if not report:
+        flash("Report not found.", "error")
+        return redirect(url_for("main.home"))
+    return report["report_html"]
