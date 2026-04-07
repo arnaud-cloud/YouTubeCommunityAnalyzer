@@ -65,7 +65,12 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
                    COUNT(DISTINCT channel_id)                       AS channel_count,
                    SUM(like_count)                                  AS total_likes,
                    AVG(COALESCE(engagement_normalized, 0))          AS avg_engagement_norm,
-                   SUM(CASE WHEN is_reply = 1 THEN 1.0 ELSE 0.0 END) / COUNT(*) AS reply_ratio,
+                   CASE
+                     WHEN SUM(CASE WHEN channel_id != author_channel_id THEN 1 ELSE 0 END) = 0
+                       THEN 0.0
+                     ELSE SUM(CASE WHEN is_reply = 1 AND channel_id != author_channel_id THEN 1.0 ELSE 0.0 END)
+                          / SUM(CASE WHEN channel_id != author_channel_id THEN 1 ELSE 0 END)
+                   END AS reply_ratio,
                    AVG(LENGTH(COALESCE(text, '')))                  AS avg_length
             FROM comments
             WHERE channel_id IN ({ph})
