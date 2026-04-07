@@ -44,25 +44,11 @@
 
 {% if themes %}
 
-{# ── Most Recently Active strip ─────────────────────────────────────────── #}
-{% set recent = themes[:8] %}
+{# ── Most Recently Active strip — populated by JS after filtering ────────── #}
 <div class="section" id="recent-strip-section">
     <h2>Most Recently Active</h2>
     <div style="display:flex;gap:1rem;overflow-x:auto;padding-bottom:.5rem" id="recent-strip">
-        {% for t in recent %}
-        <a href="{{ url_for('themes.detail', theme_id=t.id) }}"
-           class="recent-card"
-           data-evidence="{{ t.total_evidence }}"
-           style="text-decoration:none;flex-shrink:0;width:200px;background:var(--surface);border:1px solid var(--border);border-top:3px solid {{ t.type_color }};border-radius:8px;padding:1rem;display:flex;flex-direction:column;gap:.5rem">
-            <div style="font-size:.72rem;font-weight:bold;text-transform:uppercase;color:{{ t.type_color }}">{{ t.gossip_type or 'unknown' }}</div>
-            <div style="font-size:.9rem;font-weight:600;color:var(--text);line-height:1.3;min-height:2.4em">{{ t.title[:60] }}</div>
-            <div>{{ t.sparkline | safe }}</div>
-            <div style="font-size:.75rem;color:var(--muted)">
-                {% if t.last_seen_at %}Last: {{ t.last_seen_at[:7] }}{% endif %}
-                · {{ t.total_evidence }} evidence
-            </div>
-        </a>
-        {% endfor %}
+        <p class="muted" style="font-size:.85rem;padding:.5rem 0">Loading…</p>
     </div>
 </div>
 
@@ -96,6 +82,9 @@
            data-type="{{ t.gossip_type or '' }}"
            data-subjects="{{ t.subjects | join(' ') | lower }}"
            data-evidence="{{ t.total_evidence }}"
+           data-title="{{ t.title | e }}"
+           data-type-color="{{ t.type_color }}"
+           data-last-seen="{{ t.last_seen_at or '' }}"
            style="text-decoration:none;display:flex;flex-direction:column;gap:.6rem;
                   background:var(--surface);border:1px solid var(--border);
                   border-top:3px solid {{ t.type_color }};border-radius:8px;
@@ -112,7 +101,7 @@
                 {% endfor %}
             </div>
             {% endif %}
-            <div>{{ t.sparkline | safe }}</div>
+            <div class="card-sparkline">{{ t.sparkline | safe }}</div>
             <div style="font-size:.78rem;color:var(--muted);margin-top:auto">
                 {% if t.first_seen_at %}First: {{ t.first_seen_at[:7] }}{% endif %}
                 {% if t.first_seen_at and t.last_seen_at %} · {% endif %}
@@ -143,13 +132,51 @@ const subjectInput   = document.getElementById('filter-subject');
 const evidenceSlider = document.getElementById('filter-evidence');
 const evidenceLabel  = document.getElementById('evidence-label');
 const cards          = document.querySelectorAll('.theme-card');
-const recentCards    = document.querySelectorAll('.recent-card');
+const recentStrip    = document.getElementById('recent-strip');
 const recentSection  = document.getElementById('recent-strip-section');
 const noResults      = document.getElementById('no-results');
 const countEl        = document.getElementById('filter-count');
+const STRIP_SIZE     = 6;
 
 function updateEvidenceLabel(val) {
     evidenceLabel.textContent = val <= 1 ? 'any' : (val >= 20 ? '20+' : String(val));
+}
+
+function cardPasses(card, fType, fSubject, fEvidence) {
+    const typeOk     = !fType    || card.dataset.type === fType;
+    const subjectOk  = !fSubject || card.dataset.subjects.includes(fSubject);
+    const evidenceOk = fEvidence <= 1 || parseInt(card.dataset.evidence, 10) >= fEvidence;
+    return typeOk && subjectOk && evidenceOk;
+}
+
+function buildStripCard(card) {
+    const href      = card.getAttribute('href');
+    const color     = card.dataset.typeColor;
+    const type      = card.dataset.type || 'unknown';
+    const title     = card.dataset.title || '';
+    const evidence  = card.dataset.evidence;
+    const lastSeen  = (card.dataset.lastSeen || '').slice(0, 7);
+    const sparkline = card.querySelector('.card-sparkline');
+
+    const a = document.createElement('a');
+    a.href  = href;
+    a.style.cssText = `text-decoration:none;flex-shrink:0;width:200px;background:var(--surface);
+        border:1px solid var(--border);border-top:3px solid ${color};border-radius:8px;
+        padding:1rem;display:flex;flex-direction:column;gap:.5rem`;
+    a.innerHTML = `
+        <div style="font-size:.72rem;font-weight:bold;text-transform:uppercase;color:${color}">${escHtml(type)}</div>
+        <div style="font-size:.9rem;font-weight:600;color:var(--text);line-height:1.3;min-height:2.4em">${escHtml(title.slice(0, 60))}</div>
+        <div class="strip-sparkline"></div>
+        <div style="font-size:.75rem;color:var(--muted)">${lastSeen ? 'Last: ' + lastSeen : ''} · ${evidence} evidence</div>
+    `;
+    if (sparkline) {
+        a.querySelector('.strip-sparkline').innerHTML = sparkline.innerHTML;
+    }
+    return a;
+}
+
+function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function applyFilters() {
@@ -159,27 +186,27 @@ function applyFilters() {
 
     updateEvidenceLabel(fEvidence);
 
-    // Grid cards
-    let visible = 0;
+    // Filter grid cards
+    const passing = [];
     cards.forEach(card => {
-        const typeOk     = !fType    || card.dataset.type === fType;
-        const subjectOk  = !fSubject || card.dataset.subjects.includes(fSubject);
-        const evidenceOk = fEvidence <= 1 || parseInt(card.dataset.evidence, 10) >= fEvidence;
-        const show = typeOk && subjectOk && evidenceOk;
+        const show = cardPasses(card, fType, fSubject, fEvidence);
         card.style.display = show ? '' : 'none';
-        if (show) visible++;
+        if (show) passing.push(card);
     });
-    if (countEl) countEl.textContent = visible + ' theme' + (visible !== 1 ? 's' : '');
-    if (noResults) noResults.style.display = (visible === 0 && cards.length > 0) ? '' : 'none';
+    if (countEl) countEl.textContent = passing.length + ' theme' + (passing.length !== 1 ? 's' : '');
+    if (noResults) noResults.style.display = (passing.length === 0 && cards.length > 0) ? '' : 'none';
 
-    // Recently Active strip — hide cards that don't meet the evidence threshold
-    let recentVisible = 0;
-    recentCards.forEach(card => {
-        const evidenceOk = fEvidence <= 1 || parseInt(card.dataset.evidence, 10) >= fEvidence;
-        card.style.display = evidenceOk ? '' : 'none';
-        if (evidenceOk) recentVisible++;
-    });
-    if (recentSection) recentSection.style.display = recentVisible === 0 ? 'none' : '';
+    // Rebuild Recently Active strip from first STRIP_SIZE passing cards
+    if (recentStrip) {
+        recentStrip.innerHTML = '';
+        const top = passing.slice(0, STRIP_SIZE);
+        if (top.length === 0) {
+            recentSection.style.display = 'none';
+        } else {
+            recentSection.style.display = '';
+            top.forEach(card => recentStrip.appendChild(buildStripCard(card)));
+        }
+    }
 }
 
 if (typeSelect)     typeSelect.addEventListener('change', applyFilters);
