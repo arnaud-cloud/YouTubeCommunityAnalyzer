@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ score.author_name }} — {{ community.name }} — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        {{ score.author_name or score.author_channel_id }}
+        {% if is_creator %}
+        <span style="font-size:.7rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .5em;margin-left:.4em;vertical-align:middle">creator</span>
+        {% endif %}
+    </h1>
+    <div style="display:flex;gap:.75rem">
+        <a href="{{ url_for('gossip.commenters', community_id=community.id) }}" class="btn btn-outline">← Commenters</a>
+    </div>
+</div>
+
+{# ── Score card ─────────────────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;text-align:center">
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.4rem">Quality Score</div>
+    {% set pct = (score.quality_score * 100) | int %}
+    <div style="font-size:2rem;font-weight:700;color:{% if score.tier=='A' %}#2ecc71{% elif score.tier=='B' %}#a8e6cf{% elif score.tier=='C' %}#f39c12{% else %}#e74c3c{% endif %}">
+        {{ pct }}%
+    </div>
+    <span class="tier-badge tier-{{ score.tier }}" style="margin-top:.4rem;display:inline-block">Tier {{ score.tier }}</span>
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem">
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Score breakdown</div>
+    {% set items = [
+      ("Engagement",   (score.avg_engagement_norm * 100) | int, "E"),
+      ("Channel spread", (score.channel_spread_score * 100) | int, "C"),
+      ("Like ratio",   (score.like_ratio_score * 100) | int, "L"),
+      ("Factual anchors", (score.factual_anchor_score * 100) | int, "F"),
+      ("Avg length",   (score.avg_length_score * 100) | int, "Len"),
+    ] %}
+    {% for label, val, abbr in items %}
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
+      <span style="width:110px;font-size:.8rem;color:var(--muted)">{{ label }}</span>
+      <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:{{ val }}%;height:100%;background:var(--accent);border-radius:3px"></div>
+      </div>
+      <span style="width:32px;text-align:right;font-size:.8rem">{{ val }}%</span>
+    </div>
+    {% endfor %}
+    {% if score.llm_tone_score is not none %}
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
+      <span style="width:110px;font-size:.8rem;color:#a8e6cf">LLM Tone</span>
+      <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:{{ (score.llm_tone_score * 100) | int }}%;height:100%;background:#a8e6cf;border-radius:3px"></div>
+      </div>
+      <span style="width:32px;text-align:right;font-size:.8rem">{{ (score.llm_tone_score * 100) | int }}%</span>
+    </div>
+    {% else %}
+    <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
+      <span style="width:110px;font-size:.8rem;color:var(--muted)">Vocab richness</span>
+      <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:{{ (score.vocab_richness_score * 100) | int }}%;height:100%;background:var(--accent);border-radius:3px"></div>
+      </div>
+      <span style="width:32px;text-align:right;font-size:.8rem">{{ (score.vocab_richness_score * 100) | int }}%</span>
+    </div>
+    {% endif %}
+    {% if score.reply_ratio is not none %}
+    <div style="display:flex;align-items:center;gap:.5rem;margin-top:.2rem">
+      <span style="width:110px;font-size:.8rem;color:var(--muted)">Reply penalty</span>
+      <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:{{ (score.reply_ratio * 100) | int }}%;height:100%;background:#e74c3c55;border-radius:3px"></div>
+      </div>
+      <span style="width:32px;text-align:right;font-size:.8rem;color:#e74c3c">{{ (score.reply_ratio * 100) | int }}%</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem">
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Activity</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+      {% for label, val in [
+        ("Comments", score.comment_count),
+        ("Channels", score.channel_count),
+        ("Total likes", score.total_likes),
+        ("Reply %", ((score.reply_ratio or 0) * 100) | int ~ "%"),
+      ] %}
+      <div>
+        <div style="font-size:.75rem;color:var(--muted)">{{ label }}</div>
+        <div style="font-size:1.1rem;font-weight:600">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if score.computed_at %}
+    <div style="margin-top:.75rem;font-size:.75rem;color:var(--muted)">Scored {{ score.computed_at[:10] }}</div>
+    {% endif %}
+  </div>
+
+</div>
+
+{# ── LLM Tone reason ────────────────────────────────────────────────────── #}
+{% if score.llm_tone_reason %}
+<div style="background:var(--surface);border:1px solid #a8e6cf44;border-radius:8px;padding:1.1rem 1.25rem;margin-bottom:1.5rem">
+  <div style="font-size:.8rem;color:#a8e6cf;font-weight:600;margin-bottom:.4rem">
+    🎭 LLM Tone Assessment
+    <span style="font-weight:400;color:var(--muted);margin-left:.5rem">{{ score.llm_tone_backend }} / {{ score.llm_tone_model }}</span>
+  </div>
+  <div style="font-size:.95rem;line-height:1.5">{{ score.llm_tone_reason }}</div>
+</div>
+{% endif %}
+
+{# ── Top comments ───────────────────────────────────────────────────────── #}
+<h2 style="font-size:1rem;font-weight:600;margin-bottom:.75rem;color:var(--muted)">
+    Top comments by likes (up to 50)
+</h2>
+{% if top_comments %}
+<div style="display:flex;flex-direction:column;gap:.6rem">
+  {% for c in top_comments %}
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.85rem 1rem">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;margin-bottom:.4rem">
+      <span style="font-size:.8rem;color:var(--muted)">
+        {% if c.channel_name %}<a href="{{ url_for('gossip.commenters', community_id=community.id) }}" style="color:var(--muted)">{{ c.channel_name }}</a> · {% endif %}
+        {% if c.video_title %}<span title="{{ c.video_title }}">{{ c.video_title[:60] }}{% if c.video_title|length > 60 %}…{% endif %}</span>{% endif %}
+        {% if c.is_reply %}<span style="margin-left:.4em;font-size:.75rem;background:var(--border);border-radius:3px;padding:.05em .35em">reply</span>{% endif %}
+      </span>
+      <span style="font-size:.8rem;white-space:nowrap;color:{% if c.like_count > 10 %}#f39c12{% else %}var(--muted){% endif %}">
+        {% if c.like_count > 0 %}👍 {{ c.like_count }}{% endif %}
+      </span>
+    </div>
+    <div style="font-size:.92rem;line-height:1.55;white-space:pre-wrap">{{ c.text }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p style="color:var(--muted)">No comments found.</p>
+{% endif %}
+
+{% endblock %}

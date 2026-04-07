@@ -382,7 +382,7 @@ def score_community_tone(conn, community_id: int,
     ph = ",".join("?" * len(channel_ids))
 
     BATCH_SIZE = 10
-    COMMENTS_PER_AUTHOR = 8
+    COMMENTS_PER_AUTHOR = 30
     total_scored = 0
 
     for batch_start in range(0, len(rows), BATCH_SIZE):

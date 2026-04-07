@@ -737,6 +737,54 @@ def commenters(community_id):
     )
 
 
+@bp.route("/<int:community_id>/commenter/<path:author_channel_id>")
+def commenter_detail(community_id, author_channel_id):
+    """Detail page for a single commenter: scores, tone reason, top comments."""
+    conn = get_db(current_app.config["DB_PATH"])
+    community = conn.execute(
+        "SELECT * FROM communities WHERE id = ?", (community_id,)
+    ).fetchone()
+    if not community:
+        conn.close()
+        return "Community not found", 404
+
+    score_row = conn.execute(
+        "SELECT * FROM commenter_scores WHERE community_id = ? AND author_channel_id = ?",
+        (community_id, author_channel_id),
+    ).fetchone()
+    if not score_row:
+        conn.close()
+        return "Commenter not found", 404
+
+    from core.db import get_community_channel_ids
+    channel_ids = get_community_channel_ids(conn, community_id)
+    ph = ",".join("?" * len(channel_ids))
+
+    top_comments = conn.execute(
+        f"""SELECT c.text, c.like_count, c.published_at, c.is_reply,
+                   v.title AS video_title, c.video_id, c.channel_id,
+                   ch.channel_name
+            FROM comments c
+            LEFT JOIN videos v ON c.video_id = v.video_id
+            LEFT JOIN channels ch ON c.channel_id = ch.channel_id
+            WHERE c.channel_id IN ({ph}) AND c.author_channel_id = ?
+              AND c.text IS NOT NULL
+            ORDER BY c.like_count DESC
+            LIMIT 50""",
+        channel_ids + [author_channel_id],
+    ).fetchall()
+
+    channel_owner_ids = set(channel_ids)
+    conn.close()
+    return render_template(
+        "gossip_commenter_detail.html",
+        community=dict(community),
+        score=dict(score_row),
+        top_comments=[dict(r) for r in top_comments],
+        is_creator=author_channel_id in channel_owner_ids,
+    )
+
+
 @bp.route("/<int:community_id>/score-commenters", methods=["POST"])
 def score_commenters_now(community_id):
     """Manually trigger commenter credibility re-scoring."""
