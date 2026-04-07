@@ -175,8 +175,11 @@
                 </div>
             </div>
             <p class="pipe-preset-desc">Collect → Summarize → Aggregate → Analyze → Report → Themes → Exec Reports. Use for first run or weekly refresh.</p>
-            {% if presets.full_pipeline.cost %}
-            <p class="pipe-preset-cost">⚡ ~{{ presets.full_pipeline.cost.videos }} videos · ~${{ "%.2f"|format(presets.full_pipeline.cost.cost) }} ({{ presets.full_pipeline.cost.model }})</p>
+            {% if presets.full_pipeline.summarize_cost %}
+            <p class="pipe-preset-cost">⚡ Summarize: ~{{ presets.full_pipeline.summarize_cost.videos }} videos · ~${{ "%.2f"|format(presets.full_pipeline.summarize_cost.cost) }} ({{ presets.full_pipeline.summarize_cost.model }})</p>
+            {% endif %}
+            {% if presets.full_pipeline.analyze_cost %}
+            <p class="pipe-preset-cost">⚡ Analysis chain: ~${{ "%.2f"|format(presets.full_pipeline.analyze_cost.cost) }} ({{ presets.full_pipeline.analyze_cost.model }})</p>
             {% endif %}
             {% if presets.full_pipeline.reason %}
             <p class="pipe-preset-reason">{{ presets.full_pipeline.reason }}</p>
@@ -203,6 +206,9 @@
                 </div>
             </div>
             <p class="pipe-preset-desc">Aggregate → Analyze → Report → Themes → Exec Reports. Skips collect &amp; summarize. Use after changing aliases or channel list.</p>
+            {% if presets.reanalyze.analyze_cost %}
+            <p class="pipe-preset-cost">⚡ Analysis chain: ~${{ "%.2f"|format(presets.reanalyze.analyze_cost.cost) }} ({{ presets.reanalyze.analyze_cost.model }})</p>
+            {% endif %}
             {% if presets.reanalyze.reason %}
             <p class="pipe-preset-reason">{{ presets.reanalyze.reason }}</p>
             {% else %}
@@ -228,8 +234,11 @@
                 </div>
             </div>
             <p class="pipe-preset-desc">Force re-summarize all videos → full downstream chain. Skips collect. Use after changing the LLM model.</p>
-            {% if presets.resummarize_all.cost %}
-            <p class="pipe-preset-cost">⚡ ~{{ presets.resummarize_all.cost.videos }} videos · ~${{ "%.2f"|format(presets.resummarize_all.cost.cost) }} ({{ presets.resummarize_all.cost.model }})</p>
+            {% if presets.resummarize_all.summarize_cost %}
+            <p class="pipe-preset-cost">⚡ Summarize: ~{{ presets.resummarize_all.summarize_cost.videos }} videos · ~${{ "%.2f"|format(presets.resummarize_all.summarize_cost.cost) }} ({{ presets.resummarize_all.summarize_cost.model }})</p>
+            {% endif %}
+            {% if presets.resummarize_all.analyze_cost %}
+            <p class="pipe-preset-cost">⚡ Analysis chain: ~${{ "%.2f"|format(presets.resummarize_all.analyze_cost.cost) }} ({{ presets.resummarize_all.analyze_cost.model }})</p>
             {% endif %}
             {% if presets.resummarize_all.reason %}
             <p class="pipe-preset-reason">{{ presets.resummarize_all.reason }}</p>

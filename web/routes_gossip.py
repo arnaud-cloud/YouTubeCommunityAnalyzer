@@ -27,71 +27,112 @@ _PRICING = {
 _DEFAULT_BUFFER = 120_000
 _SYSTEM_PROMPT_TOKENS = 900   # rough size of extract_gossip_batch.txt
 _OUTPUT_TOKENS_PER_VIDEO = 300
+# Downstream analysis chain: analyze + themes(LLM) + 2 exec reports ≈ 4 LLM calls
+# each with the full aggregation payload; outputs are JSON-heavy
+_ANALYZE_PROMPT_TOKENS = 2_500   # per call: system prompt overhead
+_ANALYZE_CALLS = 4               # analyze + themes + exec_summary + top_insights
+_ANALYZE_OUTPUT_TOKENS = 12_000  # total output across all 4 calls
 
 
-def _calc_cost(video_count: int, total_comment_chars: int,
-               model: str, buffer_chars: int) -> dict:
+def _model_label(model: str) -> str:
+    return model.replace("claude-", "").replace("-", " ").title()
+
+
+def _model_prices(model: str) -> tuple[float, float]:
+    return next(
+        (v for k, v in _PRICING.items() if model.startswith(k)),
+        (3.00, 15.00),
+    )
+
+
+def _calc_summarize_cost(video_count: int, total_comment_chars: int,
+                         model: str, buffer_chars: int) -> dict:
     """Return cost estimate dict for a summarize run."""
     if video_count == 0:
-        return {"videos": 0, "cost": 0.0, "model": model}
-    in_price, out_price = next(
-        (v for k, v in _PRICING.items() if model.startswith(k)),
-        (3.00, 15.00),  # fallback: Sonnet price
-    )
-    # Estimate number of LLM batches (each batch ≤ buffer_chars of comment text)
-    num_batches = max(1, math.ceil(total_comment_chars / buffer_chars))
+        return {"videos": 0, "cost": 0.0, "model": _model_label(model)}
+    in_price, out_price = _model_prices(model)
+    num_batches   = max(1, math.ceil(total_comment_chars / buffer_chars))
     input_tokens  = total_comment_chars // 4 + num_batches * _SYSTEM_PROMPT_TOKENS + video_count * 50
     output_tokens = video_count * _OUTPUT_TOKENS_PER_VIDEO
     cost = (input_tokens / 1_000_000 * in_price) + (output_tokens / 1_000_000 * out_price)
-    # Pretty model label: "claude-haiku-4-5" → "Haiku 4.5"
-    label = model.replace("claude-", "").replace("-", " ").title()
-    return {"videos": video_count, "cost": cost, "model": label}
+    return {"videos": video_count, "cost": cost, "model": _model_label(model)}
 
 
-def _get_cost_estimates(conn, community_id: int) -> dict | None:
+def _calc_analyze_cost(conn, community_id: int, model: str) -> dict:
     """
-    Return cost estimates for incremental and force summarize runs,
-    or None if the summarize backend is not anthropic.
+    Estimate cost for the full downstream analysis chain:
+    analyze + themes (LLM titles) + exec_summary + top_insights.
+    Uses the last stored aggregation's JSON sizes as a proxy for input volume.
     """
-    settings = get_all_settings(conn)
-    if settings.get("llm_summarize_backend", "ollama") != "anthropic":
-        return None
+    in_price, out_price = _model_prices(model)
+    row = conn.execute(
+        """SELECT COALESCE(LENGTH(entity_metrics_json), 0)
+                + COALESCE(LENGTH(gossip_corpus_json), 0)
+                + COALESCE(LENGTH(corroborated_json), 0)
+                + COALESCE(LENGTH(asymmetries_json), 0)
+                + COALESCE(LENGTH(comment_velocity_json), 0) AS total_chars
+           FROM aggregation_results WHERE community_id = ?
+           ORDER BY id DESC LIMIT 1""",
+        (community_id,),
+    ).fetchone()
+    data_chars = row[0] if row else 40_000  # rough default if no prior run
+    # Each call receives the aggregation payload; _ANALYZE_CALLS calls total
+    input_tokens  = (data_chars // 4) * _ANALYZE_CALLS + _ANALYZE_PROMPT_TOKENS * _ANALYZE_CALLS
+    output_tokens = _ANALYZE_OUTPUT_TOKENS
+    cost = (input_tokens / 1_000_000 * in_price) + (output_tokens / 1_000_000 * out_price)
+    return {"cost": cost, "model": _model_label(model)}
 
-    model = settings.get("llm_summarize_anthropic_model", "claude-haiku-4-5")
-    buffer_chars = int(settings.get("llm_summarize_buffer_chars", str(_DEFAULT_BUFFER)))
-    channel_ids = get_community_channel_ids(conn, community_id)
-    if not channel_ids:
-        return None
 
-    ph = ",".join("?" * len(channel_ids))
+def _get_cost_estimates(conn, community_id: int) -> dict:
+    """
+    Return cost estimates for each LLM role that uses Anthropic.
+    Keys: summarize (with incremental/force sub-keys), analyze.
+    Always returns a dict; missing keys mean that role uses a local backend.
+    """
+    settings     = get_all_settings(conn)
+    channel_ids  = get_community_channel_ids(conn, community_id)
+    result: dict = {}
 
-    pending = conn.execute(f"""
-        SELECT COUNT(DISTINCT v.video_id) AS cnt,
-               COALESCE(SUM(LENGTH(c.text)), 0) AS chars
-        FROM videos v
-        JOIN comments c ON v.video_id = c.video_id
-        LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
-        WHERE v.channel_id IN ({ph})
-          AND (vs.video_id IS NULL
-               OR vs.last_comment_published_at IS NULL
-               OR EXISTS (
-                   SELECT 1 FROM comments c2
-                   WHERE c2.video_id = v.video_id
-                     AND c2.published_at > vs.last_comment_published_at))
-    """, channel_ids).fetchone()
+    # Summarize cost (per-video, scales with corpus size)
+    if settings.get("llm_summarize_backend", "ollama") == "anthropic" and channel_ids:
+        summ_model   = settings.get("llm_summarize_anthropic_model", "claude-haiku-4-5")
+        buffer_chars = int(settings.get("llm_summarize_buffer_chars", str(_DEFAULT_BUFFER)))
+        ph = ",".join("?" * len(channel_ids))
 
-    total = conn.execute(f"""
-        SELECT COUNT(DISTINCT v.video_id) AS cnt,
-               COALESCE(SUM(LENGTH(c.text)), 0) AS chars
-        FROM videos v
-        JOIN comments c ON v.video_id = c.video_id
-        WHERE v.channel_id IN ({ph})
-    """, channel_ids).fetchone()
+        pending = conn.execute(f"""
+            SELECT COUNT(DISTINCT v.video_id) AS cnt,
+                   COALESCE(SUM(LENGTH(c.text)), 0) AS chars
+            FROM videos v
+            JOIN comments c ON v.video_id = c.video_id
+            LEFT JOIN video_summaries vs ON v.video_id = vs.video_id
+            WHERE v.channel_id IN ({ph})
+              AND (vs.video_id IS NULL
+                   OR vs.last_comment_published_at IS NULL
+                   OR EXISTS (
+                       SELECT 1 FROM comments c2
+                       WHERE c2.video_id = v.video_id
+                         AND c2.published_at > vs.last_comment_published_at))
+        """, channel_ids).fetchone()
 
-    return {
-        "incremental": _calc_cost(pending["cnt"], pending["chars"], model, buffer_chars),
-        "force":       _calc_cost(total["cnt"],   total["chars"],   model, buffer_chars),
-    }
+        total = conn.execute(f"""
+            SELECT COUNT(DISTINCT v.video_id) AS cnt,
+                   COALESCE(SUM(LENGTH(c.text)), 0) AS chars
+            FROM videos v
+            JOIN comments c ON v.video_id = c.video_id
+            WHERE v.channel_id IN ({ph})
+        """, channel_ids).fetchone()
+
+        result["summarize"] = {
+            "incremental": _calc_summarize_cost(pending["cnt"], pending["chars"], summ_model, buffer_chars),
+            "force":       _calc_summarize_cost(total["cnt"],   total["chars"],   summ_model, buffer_chars),
+        }
+
+    # Analyze cost (analyze + themes + exec reports — all use role="analyze")
+    if settings.get("llm_analyze_backend", "anthropic") == "anthropic":
+        analyze_model = settings.get("llm_analyze_anthropic_model", "claude-sonnet-4-6")
+        result["analyze"] = _calc_analyze_cost(conn, community_id, analyze_model)
+
+    return result
 
 
 def _get_pipeline_status(conn, community_id: int) -> dict:
@@ -169,26 +210,33 @@ def _get_preset_availability(conn, community_id: int, cost_estimates) -> dict:
             channel_ids,
         ).fetchone()[0] > 0
 
+    summ  = cost_estimates.get("summarize") or {}
+    anlyz = cost_estimates.get("analyze")
+
     return {
         "collect": {
             "enabled": has_channels,
             "reason": None if has_channels else "No channels in community",
-            "cost": None,
+            "summarize_cost": None,
+            "analyze_cost": None,
         },
         "full_pipeline": {
             "enabled": has_channels,
             "reason": None if has_channels else "No channels in community",
-            "cost": cost_estimates["incremental"] if cost_estimates else None,
+            "summarize_cost": summ.get("incremental"),
+            "analyze_cost": anlyz,
         },
         "reanalyze": {
             "enabled": has_summaries,
             "reason": None if has_summaries else "No summaries yet — run Full Pipeline first",
-            "cost": None,
+            "summarize_cost": None,
+            "analyze_cost": anlyz,
         },
         "resummarize_all": {
             "enabled": has_channels,
             "reason": None if has_channels else "No channels in community",
-            "cost": cost_estimates["force"] if cost_estimates else None,
+            "summarize_cost": summ.get("force"),
+            "analyze_cost": anlyz,
         },
     }
 
