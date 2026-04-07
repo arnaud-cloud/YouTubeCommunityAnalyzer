@@ -238,7 +238,8 @@ def _svg_line_chart(title, series, width=700, top_n=6):
 
 # -- Chart builders -----------------------------------------------------------
 
-def _make_charts(entity_metrics, gossip_rows, velocity, top_commenters):
+def _make_charts(entity_metrics, gossip_rows, velocity, top_commenters,
+                 quality_gossip_rows=None):
     top = sorted(entity_metrics.values(), key=lambda x: x.get("avg_sentiment", 0))[-15:]
     sentiment_chart = ""
     if top:
@@ -292,7 +293,25 @@ def _make_charts(entity_metrics, gossip_rows, velocity, top_commenters):
             x_min=0, x_max=max(values + [1]) * 1.15,
         )
 
-    return sentiment_chart, velocity_chart, heatmap, type_pie, conf_chart, commenter_chart
+    quality_chart = ""
+    scored_rows = [r for r in (quality_gossip_rows or [])
+                   if r.get("evidence_quality_score") is not None]
+    if scored_rows:
+        tier_counts = {"A": 0, "B": 0, "C": 0, "D": 0}
+        for r in scored_rows:
+            s = r["evidence_quality_score"]
+            t = "A" if s >= 0.65 else "B" if s >= 0.45 else "C" if s >= 0.25 else "D"
+            tier_counts[t] += 1
+        tiers = list(tier_counts.keys())
+        tcounts = [float(v) for v in tier_counts.values()]
+        if any(tcounts):
+            quality_chart = _svg_hbar(
+                "Gossip Items by Evidence Quality Tier", tiers, tcounts,
+                ["#2ecc71", "#a8e6cf", "#f39c12", "#e74c3c"],
+                x_min=0, x_max=max(tcounts) * 1.15,
+            )
+
+    return sentiment_chart, velocity_chart, heatmap, type_pie, conf_chart, commenter_chart, quality_chart
 
 
 # -- Report normalisation -----------------------------------------------------
@@ -454,7 +473,11 @@ def _build_markdown(row: dict) -> str:
     ln("---")
 
     ln("## Top Drama Items")
-    for item in a.get("top_drama_items", []):
+    drama_items = sorted(
+        a.get("top_drama_items", []),
+        key=lambda x: -(x.get("_evidence_quality") or 0.0),
+    )
+    for item in drama_items:
         corr = "[OK] Corroborated" if item.get("corroborated") else "[!] Single source"
         conf = (item.get("confidence") or "low").upper()
         subjects = item.get("subjects") or []
@@ -463,6 +486,12 @@ def _build_markdown(row: dict) -> str:
         ln(f"### {item.get('title', 'Untitled')}", f"*{corr} | Confidence: {conf}*")
         if subjects_str:
             ln(f"**Subjects:** {subjects_str}")
+        eq = item.get("_evidence_quality")
+        if eq is not None:
+            tier = "A" if eq >= 0.65 else "B" if eq >= 0.45 else "C" if eq >= 0.25 else "D"
+            warn = " ⚠ Low evidence quality — single low-credibility source" if tier == "D" else ""
+            pct = int(eq * 100)
+            ln(f"*Evidence quality: Tier {tier} ({pct}%){warn}*")
         ln(desc)
     ln("---")
 
@@ -561,13 +590,35 @@ def generate_report_html(conn, analysis_id: int) -> str:
 
     gossip_rows = [
         dict(r) for r in conn.execute(
-            "SELECT gossip_type, confidence, comment_likes_total FROM gossip_items"
+            "SELECT gossip_type, confidence, comment_likes_total, "
+            "evidence_quality_score, claim FROM gossip_items"
         )
     ]
 
+    # Build claim → evidence_quality_score map for drama item enrichment
+    quality_map: dict[str, float] = {}
+    for r in gossip_rows:
+        if r.get("evidence_quality_score") is not None and r.get("claim"):
+            quality_map[r["claim"][:80]] = r["evidence_quality_score"]
+
+    # Enrich top_drama_items with evidence quality scores (best-effort claim matching)
+    for item in a.get("top_drama_items", []):
+        desc = (item.get("description") or item.get("summary") or "")[:80]
+        title = (item.get("title") or "")[:80]
+        # Try matching against stored claim text
+        eq = quality_map.get(desc) or quality_map.get(title)
+        if eq is None:
+            # Partial substring search
+            for claim_key, score in quality_map.items():
+                if claim_key and (claim_key[:40] in desc or desc[:40] in claim_key):
+                    eq = score
+                    break
+        item["_evidence_quality"] = eq
+
     md = _build_markdown(row)
-    sentiment, velocity_c, heatmap, type_pie, conf_c, commenter_c = _make_charts(
-        entity_metrics, gossip_rows, velocity, top_commenters
+    sentiment, velocity_c, heatmap, type_pie, conf_c, commenter_c, quality_c = _make_charts(
+        entity_metrics, gossip_rows, velocity, top_commenters,
+        quality_gossip_rows=gossip_rows,
     )
 
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -597,6 +648,7 @@ def generate_report_html(conn, analysis_id: int) -> str:
         + cdiv(heatmap, full=True)
         + cdiv(type_pie)
         + cdiv(conf_c)
+        + cdiv(quality_c)
         + cdiv(commenter_c, full=True)
         + '</div>\n'
         + _md_to_html(md) + '\n'

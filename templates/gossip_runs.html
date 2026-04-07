@@ -6,6 +6,7 @@
     <h1>{{ community.name }} — Gossip Pipeline</h1>
     <div style="display:flex;gap:.75rem;flex-wrap:wrap">
         <a href="{{ url_for('themes.browse', community_id=community.id) }}" class="btn btn-outline">View Themes</a>
+        <a href="{{ url_for('gossip.commenters', community_id=community.id) }}" class="btn btn-outline">Commenters</a>
         <a href="{{ url_for('gossip.executive_summary', community_id=community.id) }}" class="btn btn-outline">Executive Summary</a>
         <a href="{{ url_for('gossip.top_insights', community_id=community.id) }}" class="btn btn-outline">Top Insights</a>
         <a href="{{ url_for('community.edit', community_id=community.id) }}" class="btn btn-outline">Edit Community</a>

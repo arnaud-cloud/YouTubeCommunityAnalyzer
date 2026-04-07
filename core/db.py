@@ -74,6 +74,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "source_type" not in videos_cols:
         conn.execute("ALTER TABLE videos ADD COLUMN source_type TEXT DEFAULT 'youtube'")
 
+    # gossip_items: evidence_quality_score column
+    gi_cols = {row[1] for row in conn.execute("PRAGMA table_info(gossip_items)")}
+    if "evidence_quality_score" not in gi_cols:
+        conn.execute("ALTER TABLE gossip_items ADD COLUMN evidence_quality_score REAL")
+
     # Migrate community_channels → community_sources (one-time, only if sources is empty)
     sources_empty = conn.execute(
         "SELECT COUNT(*) FROM community_sources"

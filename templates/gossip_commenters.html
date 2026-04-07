@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}{{ community.name }} — Commenters — Community Analyzer{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>{{ community.name }} — Commenter Credibility</h1>
+    <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+        <a href="{{ url_for('gossip.runs', community_id=community.id) }}" class="btn btn-outline">← Pipeline</a>
+        <a href="{{ url_for('themes.browse', community_id=community.id) }}" class="btn btn-outline">View Themes</a>
+        <form method="post" action="{{ url_for('gossip.score_commenters_now', community_id=community.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-primary">⟳ Re-score</button>
+        </form>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+  <div class="flash flash-{{ cat }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+
+{# ── Tier summary cards ─────────────────────────────────────────────────── #}
+{% set tier_labels = [('A', '#2ecc71', 'High credibility'), ('B', '#a8e6cf', 'Above average'), ('C', '#f39c12', 'Average'), ('D', '#e74c3c', 'Low credibility')] %}
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
+  {% for tier, color, label in tier_labels %}
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem;text-align:center">
+    <div style="font-size:1.8rem;font-weight:700;color:{{ color }}">{{ tier_counts.get(tier, 0) }}</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:.4rem;margin-top:.25rem">
+      <span class="tier-badge tier-{{ tier }}">{{ tier }}</span>
+      <span style="font-size:.85rem;color:var(--muted)">{{ label }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if computed_at %}
+<p class="muted" style="font-size:.82rem;margin-bottom:1rem">Last scored: {{ computed_at }}</p>
+{% endif %}
+
+{# ── Filters ────────────────────────────────────────────────────────────── #}
+<div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap">
+  <form method="get" style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+    <label style="font-size:.9rem;color:var(--muted)">Filter by tier:</label>
+    <select name="tier" onchange="this.form.submit()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
+      <option value="" {% if not tier_filter %}selected{% endif %}>All tiers</option>
+      {% for tier, color, label in tier_labels %}
+      <option value="{{ tier }}" {% if tier_filter == tier %}selected{% endif %}>Tier {{ tier }} — {{ label }}</option>
+      {% endfor %}
+    </select>
+    <label style="font-size:.9rem;color:var(--muted)">Sort by:</label>
+    <select name="sort" onchange="this.form.submit()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
+      <option value="quality_score"  {% if sort_by == 'quality_score'  %}selected{% endif %}>Quality Score</option>
+      <option value="channel_count"  {% if sort_by == 'channel_count'  %}selected{% endif %}>Channels</option>
+      <option value="comment_count"  {% if sort_by == 'comment_count'  %}selected{% endif %}>Comments</option>
+      <option value="total_likes"    {% if sort_by == 'total_likes'    %}selected{% endif %}>Total Likes</option>
+    </select>
+    {% if tier_filter %}
+    <input type="hidden" name="tier" value="{{ tier_filter }}">
+    {% endif %}
+  </form>
+  <span style="font-size:.85rem;color:var(--muted);margin-left:auto">{{ total }} commenter{{ 's' if total != 1 }}</span>
+</div>
+
+{# ── Table ──────────────────────────────────────────────────────────────── #}
+{% if commenters %}
+<div style="overflow-x:auto">
+<table style="width:100%;border-collapse:collapse;font-size:.9rem">
+  <thead>
+    <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.82rem;text-transform:uppercase;letter-spacing:.05em">
+      <th style="padding:.5rem .75rem;width:2.5rem">#</th>
+      <th style="padding:.5rem .75rem">Name</th>
+      <th style="padding:.5rem .75rem;width:4rem;text-align:center">Tier</th>
+      <th style="padding:.5rem .75rem;min-width:140px">Score</th>
+      <th style="padding:.5rem .75rem;text-align:right">Channels</th>
+      <th style="padding:.5rem .75rem;text-align:right">Comments</th>
+      <th style="padding:.5rem .75rem;text-align:right">Likes</th>
+      <th style="padding:.5rem .75rem;text-align:right">Reply %</th>
+      <th style="padding:.5rem .75rem;min-width:200px;color:var(--muted)">Breakdown</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in commenters %}
+    {% set rank = (page - 1) * per_page + loop.index %}
+    {% set tier_color = {'A': '#2ecc71', 'B': '#a8e6cf', 'C': '#f39c12', 'D': '#e74c3c'}.get(c.tier, '#9090b0') %}
+    {% set pct = (c.quality_score * 100) | int %}
+    <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+      <td style="padding:.6rem .75rem;color:var(--muted)">{{ rank }}</td>
+      <td style="padding:.6rem .75rem;font-weight:500;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
+        {{ c.author_name or c.author_channel_id }}
+      </td>
+      <td style="padding:.6rem .75rem;text-align:center">
+        <span class="tier-badge tier-{{ c.tier }}">{{ c.tier }}</span>
+      </td>
+      <td style="padding:.6rem .75rem">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="flex:1;background:var(--border);border-radius:3px;height:6px;overflow:hidden">
+            <div style="width:{{ pct }}%;height:100%;background:{{ tier_color }};border-radius:3px"></div>
+          </div>
+          <span style="font-size:.82rem;color:{{ tier_color }};min-width:2.5em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
+        </div>
+      </td>
+      <td style="padding:.6rem .75rem;text-align:right">{{ c.channel_count }}</td>
+      <td style="padding:.6rem .75rem;text-align:right">{{ c.comment_count }}</td>
+      <td style="padding:.6rem .75rem;text-align:right">{{ c.total_likes }}</td>
+      <td style="padding:.6rem .75rem;text-align:right;color:{% if c.reply_penalty and c.reply_penalty > 0.15 %}#e74c3c{% else %}var(--muted){% endif %}">
+        {{ ((c.reply_penalty or 0) / 0.5 * 100) | int }}%
+      </td>
+      <td style="padding:.6rem .75rem">
+        <div style="display:flex;gap:.25rem;align-items:center;font-size:.75rem;color:var(--muted)">
+          <span title="Engagement">E:{{ "%.0f"|format((c.avg_engagement_norm or 0) * 100) }}%</span>
+          <span style="color:var(--border)">·</span>
+          <span title="Channel spread">C:{{ "%.0f"|format((c.channel_spread_score or 0) * 100) }}%</span>
+          <span style="color:var(--border)">·</span>
+          <span title="Like ratio">L:{{ "%.0f"|format((c.like_ratio_score or 0) * 100) }}%</span>
+          <span style="color:var(--border)">·</span>
+          <span title="Factual anchors">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
+        </div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{# ── Pagination ─────────────────────────────────────────────────────────── #}
+{% if total_pages > 1 %}
+<div style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;flex-wrap:wrap">
+  {% if page > 1 %}
+  <a href="?page={{ page - 1 }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">← Prev</a>
+  {% endif %}
+  {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+    <span class="btn btn-primary" style="padding:.35rem .75rem">{{ p }}</span>
+    {% elif (p - page)|abs <= 2 or p == 1 or p == total_pages %}
+    <a href="?page={{ p }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">{{ p }}</a>
+    {% elif (p - page)|abs == 3 %}
+    <span style="padding:.35rem .25rem;color:var(--muted)">…</span>
+    {% endif %}
+  {% endfor %}
+  {% if page < total_pages %}
+  <a href="?page={{ page + 1 }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div style="text-align:center;padding:3rem;color:var(--muted);background:var(--surface);border-radius:8px;border:1px solid var(--border)">
+  <div style="font-size:2rem;margin-bottom:.75rem">👥</div>
+  <p>No commenter scores yet.</p>
+  <p style="font-size:.9rem;margin-top:.5rem">Run the pipeline or click <strong>Re-score</strong> to compute credibility scores.</p>
+</div>
+{% endif %}
+
+<div style="margin-top:2rem;padding:1rem;background:var(--surface);border-radius:8px;border:1px solid var(--border);font-size:.82rem;color:var(--muted)">
+  <strong style="color:var(--text)">Score breakdown:</strong>
+  E = engagement (avg likes percentile) ·
+  C = channel spread (distinct channels) ·
+  L = like ratio (likes per comment) ·
+  F = factual anchors (URLs/dates in comments) ·
+  Reply % = proportion of replies (high = penalty applied)
+</div>
+{% endblock %}

@@ -223,6 +223,31 @@ CREATE TABLE IF NOT EXISTS themes (
 CREATE INDEX IF NOT EXISTS idx_themes_community  ON themes(community_id);
 CREATE INDEX IF NOT EXISTS idx_themes_last_seen  ON themes(last_seen_at);
 
+-- ═══ COMMENTER CREDIBILITY SCORES ════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS commenter_scores (
+    community_id         INTEGER NOT NULL,
+    author_channel_id    TEXT NOT NULL,
+    author_name          TEXT,
+    quality_score        REAL NOT NULL,
+    tier                 TEXT NOT NULL,          -- 'A' | 'B' | 'C' | 'D'
+    avg_engagement_norm  REAL,
+    channel_spread_score REAL,
+    like_ratio_score     REAL,
+    factual_anchor_score REAL,
+    avg_length_score     REAL,
+    reply_penalty        REAL,
+    comment_count        INTEGER,
+    channel_count        INTEGER,
+    total_likes          INTEGER,
+    computed_at          TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (community_id, author_channel_id),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_commenter_scores_tier
+    ON commenter_scores(community_id, tier);
+
 -- ═══ EXECUTIVE REPORTS (cached LLM-generated summaries) ══════════════════════
 
 CREATE TABLE IF NOT EXISTS executive_reports (

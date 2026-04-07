@@ -22,10 +22,22 @@ DO NOT EXTRACT:
 - Off-topic discussions unrelated to creator relationships
 - Pure speculation with zero evidentiary comment support
 
-CONFIDENCE RULES:
-- high: 3+ independent commenters make the same specific claim
-- medium: 2 independent commenters, or 1 with substantial likes (50+)
-- low: 1 commenter, few or no likes — include only if claim is specific and notable
+COMMENTER TIER LABELS:
+Some comments carry a [tier=X] tag where X is A, B, C, or D. These are credibility scores
+computed from engagement, cross-channel activity, and comment quality within this community.
+- Tier A (score ≥ 0.65): high-credibility witness — strong evidence anchor
+- Tier B (score ≥ 0.45): above-average credibility
+- Tier C (score ≥ 0.25): average credibility
+- Tier D (score < 0.25): low credibility — treat as weak evidence
+
+CONFIDENCE RULES (tier-adjusted):
+- high: 3+ independent commenters, OR 2+ Tier A commenters making the same claim,
+        OR 1 Tier A commenter with 50+ likes
+- medium: 2 independent commenters, OR 1 with 50+ likes,
+          OR 1 Tier B commenter with a specific verifiable claim
+- low: 1 commenter, few or no likes — include only if claim is specific and notable.
+       A sole Tier D witness with no external_refs is weak evidence; prefer to omit
+       unless the claim has 25+ likes or cites a verifiable fact (date, URL, screenshot ref).
 
 ANTI-HALLUCINATION RULE: Every gossip item MUST reference real comment IDs from the video's data. Never invent claims. If no genuine gossip exists for a video, include it with an empty gossip_items array.
 

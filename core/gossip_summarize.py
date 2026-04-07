@@ -76,7 +76,7 @@ def _get_pending_videos(conn, channel_ids: list[str],
 
 def _load_comments(conn, video_id: str) -> list[dict]:
     rows = conn.execute(
-        """SELECT comment_id, author_name, text, like_count,
+        """SELECT comment_id, author_name, author_channel_id, text, like_count,
                   published_at, is_reply, parent_id
            FROM comments
            WHERE video_id = ?
@@ -90,8 +90,16 @@ def _load_comments(conn, video_id: str) -> list[dict]:
 
 def _format_video_block(video_id: str, channel_id: str,
                         title: str, comments: list[dict],
-                        source_type: str = "youtube") -> str:
+                        source_type: str = "youtube",
+                        commenter_scores: dict | None = None) -> str:
     """Format one video/post as a labelled block for inclusion in a batch prompt."""
+
+    def _tier_tag(c: dict) -> str:
+        if not commenter_scores:
+            return ""
+        sc = commenter_scores.get(c.get("author_channel_id") or "")
+        return f" tier={sc['tier']}" if sc else ""
+
     if source_type == "reddit":
         lines = [
             f"=== REDDIT POST: {video_id} ===",
@@ -103,7 +111,7 @@ def _format_video_block(video_id: str, channel_id: str,
         for c in comments:
             prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
             lines.append(
-                f"{prefix}[id={c['comment_id']} score={c['like_count']}] "
+                f"{prefix}[id={c['comment_id']} score={c['like_count']}{_tier_tag(c)}] "
                 f"{c['author_name']}: {c['text']}"
             )
     else:
@@ -117,7 +125,7 @@ def _format_video_block(video_id: str, channel_id: str,
         for c in comments:
             prefix = "  REPLY> " if c["is_reply"] else "COMMENT> "
             lines.append(
-                f"{prefix}[id={c['comment_id']} likes={c['like_count']}] "
+                f"{prefix}[id={c['comment_id']} likes={c['like_count']}{_tier_tag(c)}] "
                 f"{c['author_name']}: {c['text']}"
             )
     lines.append("")
@@ -272,6 +280,12 @@ def summarize_community(conn, community_id: int,
     if not channel_ids:
         return 0
 
+    # Load pre-computed commenter scores (empty dict if not yet scored — tier tags omitted)
+    from .commenter_scoring import get_scores_for_community
+    commenter_scores = get_scores_for_community(conn, community_id)
+    if commenter_scores:
+        log.info(f"  Loaded {len(commenter_scores)} commenter scores for tier annotation")
+
     pending = _get_pending_videos(conn, channel_ids, force)
     log.info(f"Found {len(pending)} pending videos to summarize")
     if not pending:
@@ -289,6 +303,7 @@ def summarize_community(conn, community_id: int,
         block = _format_video_block(
             v["video_id"], v["channel_id"], v.get("title", ""), comments,
             source_type=stype,
+            commenter_scores=commenter_scores,
         )
         video_items.append((
             v["video_id"], v["channel_id"], v.get("title", ""),

@@ -80,12 +80,27 @@ def _build_entity_metrics(summaries: list[dict]) -> dict:
     return metrics
 
 
-def _build_gossip_corpus(summaries: list[dict]) -> list[dict]:
+def _build_gossip_corpus(summaries: list[dict],
+                         conn=None,
+                         channel_ids: list[str] | None = None) -> list[dict]:
+    # Pre-fetch DB ids for gossip_items so evidence quality scores can be stored later
+    id_map: dict[tuple, int] = {}
+    if conn and channel_ids:
+        ph = ",".join("?" * len(channel_ids))
+        for r in conn.execute(
+            f"SELECT id, video_id, claim FROM gossip_items WHERE channel_id IN ({ph})",
+            channel_ids,
+        ).fetchall():
+            # Key by (video_id, first 80 chars of claim) to handle near-duplicates
+            id_map[(r["video_id"], (r["claim"] or "")[:80])] = r["id"]
+
     corpus = []
     for s in summaries:
         for item in s.get("summary", {}).get("gossip_items", []):
+            claim_key = (s["video_id"], (item.get("claim") or "")[:80])
             corpus.append({
                 **item,
+                "db_id": id_map.get(claim_key),
                 "video_id": s["video_id"],
                 "channel_id": s["channel_id"],
                 "channel_name": s.get("channel_name", ""),
@@ -93,6 +108,66 @@ def _build_gossip_corpus(summaries: list[dict]) -> list[dict]:
                 "published_at": s.get("published_at", ""),
             })
     return corpus
+
+
+def _score_gossip_items(conn, community_id: int, gossip_corpus: list[dict]) -> None:
+    """
+    Compute and store evidence_quality_score on each gossip_items DB row.
+    Score = average quality_score of evidence commenters.
+    Commenters not in commenter_scores default to 0.25 (Tier C).
+    """
+    score_rows = conn.execute(
+        "SELECT author_channel_id, quality_score FROM commenter_scores "
+        "WHERE community_id = ?",
+        (community_id,),
+    ).fetchall()
+    if not score_rows:
+        return  # Scoring not computed yet — skip silently
+
+    scores_by_author = {r["author_channel_id"]: r["quality_score"] for r in score_rows}
+
+    # Collect all evidence comment IDs across corpus
+    all_evidence_ids: list[str] = []
+    for item in gossip_corpus:
+        all_evidence_ids.extend(item.get("evidence_comment_ids") or [])
+
+    if not all_evidence_ids:
+        return
+
+    # Batch-fetch comment_id → author_channel_id
+    eid_ph = ",".join("?" * len(all_evidence_ids))
+    comment_author_map: dict[str, str] = {
+        r["comment_id"]: r["author_channel_id"]
+        for r in conn.execute(
+            f"SELECT comment_id, author_channel_id FROM comments "
+            f"WHERE comment_id IN ({eid_ph})",
+            all_evidence_ids,
+        ).fetchall()
+    }
+
+    DEFAULT_SCORE = 0.25  # Tier C fallback for commenters not yet scored
+    updates: list[tuple[float, int]] = []
+    for item in gossip_corpus:
+        db_id = item.get("db_id")
+        if not db_id:
+            continue
+        evidence_ids = item.get("evidence_comment_ids") or []
+        author_scores = []
+        for eid in evidence_ids:
+            aid = comment_author_map.get(eid, "")
+            author_scores.append(scores_by_author.get(aid, DEFAULT_SCORE))
+        if not author_scores:
+            continue
+        eq_score = round(sum(author_scores) / len(author_scores), 4)
+        updates.append((eq_score, db_id))
+
+    if updates:
+        conn.executemany(
+            "UPDATE gossip_items SET evidence_quality_score = ? WHERE id = ?",
+            updates,
+        )
+        conn.commit()
+        log.info(f"  Scored evidence quality for {len(updates)} gossip items")
 
 
 def _find_corroborated_claims(corpus: list[dict]) -> list[dict]:
@@ -205,7 +280,7 @@ def aggregate_community(conn, community_id: int,
     entity_metrics = _build_entity_metrics(summaries)
     log.info(f"  {len(entity_metrics)} unique entities tracked")
 
-    gossip_corpus = _build_gossip_corpus(summaries)
+    gossip_corpus = _build_gossip_corpus(summaries, conn=conn, channel_ids=channel_ids)
     log.info(f"  {len(gossip_corpus)} gossip items total")
 
     corroborated = _find_corroborated_claims(gossip_corpus)
@@ -215,6 +290,8 @@ def aggregate_community(conn, community_id: int,
     velocity = _build_comment_velocity(summaries)
     top_commenters = _build_top_commenters(conn, summaries)
     log.info(f"  {len(top_commenters)} cross-channel superfans found")
+
+    _score_gossip_items(conn, community_id, gossip_corpus)
 
     dates = [s["published_at"] for s in summaries if s.get("published_at")]
     date_start = min(dates)[:10] if dates else ""

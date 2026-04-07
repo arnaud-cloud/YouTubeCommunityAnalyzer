@@ -10,7 +10,7 @@ import logging
 
 from .db import get_db, get_all_settings
 from . import gossip_collect, gossip_summarize, gossip_aggregate, gossip_analyze, gossip_report
-from . import gossip_themes
+from . import gossip_themes, commenter_scoring
 from .engagement import normalize_engagement
 
 log = logging.getLogger(__name__)
@@ -172,6 +172,14 @@ def run_local_steps(db_path: str, community_id: int, run_id: int):
         gossip_collect.collect_community(conn, community_id, progress_callback=progress)
         normalize_engagement(conn, community_id)
 
+        # Step 1.5: Score commenters (pure computation)
+        try:
+            n_scored = commenter_scoring.score_community(conn, community_id)
+            log.info(f"[Run {run_id}] Step 1.5: Scored {n_scored} commenters")
+            progress(f"info\tScored {n_scored} commenter credibility profiles")
+        except Exception as _ce:
+            log.warning(f"[Run {run_id}] Commenter scoring failed (non-fatal): {_ce}")
+
         # Step 2: Summarize — only if local
         if summarize_backend != "ollama":
             log.info(f"[Run {run_id}] Stopping before summarize (backend={summarize_backend})")
@@ -242,6 +250,10 @@ def run_force_summarize(db_path: str, community_id: int, run_id: int):
         _update_run(conn, run_id, "summarizing", "Force re-summarizing all videos...")
         log.info(f"[Run {run_id}] Force summarize — Step 1: Summarizing (force=True)")
         progress("info\tForce mode: reprocessing all videos regardless of prior summaries")
+        try:
+            commenter_scoring.score_community(conn, community_id)
+        except Exception as _ce:
+            log.warning(f"[Run {run_id}] Commenter scoring failed (non-fatal): {_ce}")
         gossip_summarize.summarize_community(conn, community_id,
                                              force=True, progress_callback=progress)
 
@@ -355,6 +367,13 @@ def run_gossip_pipeline(db_path: str, community_id: int, run_id: int):
         gossip_collect.collect_community(conn, community_id, progress_callback=progress)
         normalize_engagement(conn, community_id)
 
+        # Step 1.5: Score commenters (pure computation, no LLM)
+        _update_run(conn, run_id, "scoring_commenters", "Scoring commenter credibility...")
+        log.info(f"[Run {run_id}] Step 1.5: Scoring commenters")
+        n_scored = commenter_scoring.score_community(conn, community_id)
+        log.info(f"[Run {run_id}]   Scored {n_scored} commenters")
+        progress(f"info\tScored {n_scored} commenter credibility profiles")
+
         # Step 2: Summarize (LLM)
         _update_run(conn, run_id, "summarizing", "Extracting gossip with LLM...")
         log.info(f"[Run {run_id}] Step 2: Summarizing")
@@ -414,6 +433,12 @@ def run_resummarize_all(db_path: str, community_id: int, run_id: int):
     conn = get_db(db_path)
     try:
         progress = _make_progress(conn, run_id)
+
+        # Step 0.5: Score commenters
+        try:
+            commenter_scoring.score_community(conn, community_id)
+        except Exception as _ce:
+            log.warning(f"[Run {run_id}] Commenter scoring failed (non-fatal): {_ce}")
 
         # Step 1: Force summarize all videos
         _update_run(conn, run_id, "summarizing", "Force re-summarizing all videos...")

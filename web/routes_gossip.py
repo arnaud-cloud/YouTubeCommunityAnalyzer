@@ -638,6 +638,85 @@ def top_insights(community_id):
     )
 
 
+@bp.route("/<int:community_id>/commenters")
+def commenters(community_id):
+    """Commenter credibility scores panel."""
+    from core.commenter_scoring import score_community
+    conn = get_db(current_app.config["DB_PATH"])
+    community = conn.execute(
+        "SELECT * FROM communities WHERE id = ?", (community_id,)
+    ).fetchone()
+    if not community:
+        conn.close()
+        flash("Community not found.", "error")
+        return redirect(url_for("main.home"))
+
+    page = request.args.get("page", 1, type=int)
+    per_page = 50
+    tier_filter = request.args.get("tier", "")
+    sort_by = request.args.get("sort", "quality_score")
+    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes"}:
+        sort_by = "quality_score"
+
+    where_clauses = ["community_id = ?"]
+    params: list = [community_id]
+    if tier_filter in ("A", "B", "C", "D"):
+        where_clauses.append("tier = ?")
+        params.append(tier_filter)
+    where = " AND ".join(where_clauses)
+
+    total = conn.execute(
+        f"SELECT COUNT(*) FROM commenter_scores WHERE {where}", params
+    ).fetchone()[0]
+
+    rows = conn.execute(
+        f"SELECT * FROM commenter_scores WHERE {where} "
+        f"ORDER BY {sort_by} DESC "
+        f"LIMIT ? OFFSET ?",
+        params + [per_page, (page - 1) * per_page],
+    ).fetchall()
+
+    tier_counts = {}
+    for r in conn.execute(
+        "SELECT tier, COUNT(*) AS cnt FROM commenter_scores "
+        "WHERE community_id = ? GROUP BY tier",
+        (community_id,),
+    ).fetchall():
+        tier_counts[r["tier"]] = r["cnt"]
+
+    computed_at = rows[0]["computed_at"] if rows else None
+    conn.close()
+
+    return render_template(
+        "gossip_commenters.html",
+        community=dict(community),
+        commenters=[dict(r) for r in rows],
+        tier_counts=tier_counts,
+        page=page,
+        per_page=per_page,
+        total=total,
+        total_pages=max(1, math.ceil(total / per_page)),
+        sort_by=sort_by,
+        tier_filter=tier_filter,
+        computed_at=computed_at,
+    )
+
+
+@bp.route("/<int:community_id>/score-commenters", methods=["POST"])
+def score_commenters_now(community_id):
+    """Manually trigger commenter credibility re-scoring."""
+    from core.commenter_scoring import score_community
+    conn = get_db(current_app.config["DB_PATH"])
+    try:
+        n = score_community(conn, community_id)
+        flash(f"Scored {n} commenters successfully.", "success")
+    except Exception as e:
+        flash(f"Scoring failed: {e}", "error")
+    finally:
+        conn.close()
+    return redirect(url_for("gossip.commenters", community_id=community_id))
+
+
 @bp.route("/executive-report/<int:report_id>/pdf")
 def executive_report_pdf(report_id):
     """Serve a cached executive report as a standalone HTML page for
