@@ -18,6 +18,9 @@ from core.executive_summary import (
 
 bp = Blueprint("gossip", __name__)
 
+# In-memory tone scoring job state keyed by community_id
+_tone_jobs: dict[int, dict] = {}
+
 # Anthropic pricing: model-prefix → (input $/MTok, output $/MTok)
 _PRICING = {
     "claude-haiku-4-5":  (0.80,  4.00),
@@ -706,6 +709,8 @@ def commenters(community_id):
     has_ollama = settings.get("llm_summarize_backend", "anthropic") == "ollama"
     conn.close()
 
+    tone_job = _tone_jobs.get(community_id, {"status": "idle"})
+
     return render_template(
         "gossip_commenters.html",
         community=dict(community),
@@ -714,6 +719,7 @@ def commenters(community_id):
         channel_owner_ids=set(channel_owner_ids),
         creators_only=creators_only,
         has_ollama=has_ollama,
+        tone_job=tone_job,
         page=page,
         per_page=per_page,
         total=total,
@@ -742,28 +748,72 @@ def score_commenters_now(community_id):
 @bp.route("/<int:community_id>/tone-score-commenters", methods=["POST"])
 def tone_score_commenters(community_id):
     """Run Ollama LLM tone scoring pass on all scored commenters."""
+    import time
     from core.commenter_scoring import score_community, score_community_tone
     db_path = current_app.config["DB_PATH"]
+
+    # Don't start a second job if one is already running
+    existing_job = _tone_jobs.get(community_id, {})
+    if existing_job.get("status") == "running":
+        flash("Tone scoring is already running.", "warning")
+        return redirect(url_for("gossip.commenters", community_id=community_id))
+
+    _tone_jobs[community_id] = {
+        "status": "running", "done": 0, "total": 0,
+        "started_at": time.time(), "error": None,
+    }
 
     def _run():
         conn = get_db(db_path)
         try:
-            # Ensure algorithmic scores exist first
             existing = conn.execute(
                 "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
                 (community_id,),
             ).fetchone()[0]
             if existing == 0:
                 score_community(conn, community_id)
-            score_community_tone(conn, community_id)
+
+            total = conn.execute(
+                "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
+                (community_id,),
+            ).fetchone()[0]
+            _tone_jobs[community_id]["total"] = total
+
+            def _progress(done, total_count):
+                _tone_jobs[community_id]["done"] = done
+                _tone_jobs[community_id]["total"] = total_count
+
+            score_community_tone(conn, community_id, progress_callback=_progress)
+            _tone_jobs[community_id]["status"] = "done"
+            _tone_jobs[community_id]["done"] = total
         except Exception as e:
             log.error(f"Tone scoring failed for community {community_id}: {e}", exc_info=True)
+            _tone_jobs[community_id]["status"] = "error"
+            _tone_jobs[community_id]["error"] = str(e)
         finally:
             conn.close()
 
     threading.Thread(target=_run, daemon=True).start()
-    flash("LLM tone scoring started in the background. Refresh in a moment.", "success")
     return redirect(url_for("gossip.commenters", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/tone-score-status")
+def tone_score_status(community_id):
+    """JSON status for the in-progress tone scoring job."""
+    import time
+    job = _tone_jobs.get(community_id, {"status": "idle"})
+    result = dict(job)
+    if job.get("status") == "running":
+        elapsed = time.time() - (job.get("started_at") or time.time())
+        done = job.get("done", 0)
+        total = job.get("total", 0)
+        if done > 0 and elapsed > 0:
+            rate = done / elapsed  # commenters per second
+            remaining = (total - done) / rate if rate > 0 else None
+            result["eta_seconds"] = round(remaining) if remaining is not None else None
+        else:
+            result["eta_seconds"] = None
+    return jsonify(result)
 
 
 @bp.route("/executive-report/<int:report_id>/pdf")

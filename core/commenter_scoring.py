@@ -396,10 +396,7 @@ def score_community_tone(conn, community_id: int,
         )
 
         if progress_callback:
-            progress_callback(
-                f"Tone scoring batch {batch_start // BATCH_SIZE + 1}/"
-                f"{math.ceil(len(rows) / BATCH_SIZE)}: {len(sections)} commenters"
-            )
+            progress_callback(batch_start, len(rows))
 
         try:
             result = llm.complete_json(_TONE_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
@@ -496,6 +493,8 @@ def score_community_tone(conn, community_id: int,
         ],
     )
     conn.commit()
+    if progress_callback:
+        progress_callback(len(rows), len(rows))
     log.info(
         f"commenter_scoring: tone-scored {total_scored} commenters "
         f"for community {community_id}"

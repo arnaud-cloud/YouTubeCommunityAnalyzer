@@ -26,6 +26,76 @@
   {% endfor %}
 {% endwith %}
 
+{# ── Tone scoring progress bar ──────────────────────────────────────────── #}
+<div id="tone-progress-wrap" style="{% if tone_job.status != 'running' %}display:none;{% endif %}margin-bottom:1.25rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+    <span style="font-size:.9rem;font-weight:500">🎭 LLM Tone Scoring in progress…</span>
+    <span id="tone-eta" style="font-size:.82rem;color:var(--muted)"></span>
+  </div>
+  <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+    <div id="tone-bar" style="height:100%;background:#a8e6cf;border-radius:4px;width:0%;transition:width .5s ease"></div>
+  </div>
+  <div style="display:flex;justify-content:space-between;margin-top:.4rem;font-size:.8rem;color:var(--muted)">
+    <span id="tone-count"></span>
+    <span id="tone-rate"></span>
+  </div>
+</div>
+
+<script>
+(function() {
+  var communityId = {{ community.id }};
+  var pollUrl = "{{ url_for('gossip.tone_score_status', community_id=community.id) }}";
+  var wrap = document.getElementById('tone-progress-wrap');
+  var bar  = document.getElementById('tone-bar');
+  var eta  = document.getElementById('tone-eta');
+  var cnt  = document.getElementById('tone-count');
+  var rate = document.getElementById('tone-rate');
+  var timer = null;
+
+  function fmtEta(secs) {
+    if (secs === null || secs === undefined) return '';
+    if (secs < 60) return 'about ' + Math.round(secs) + 's left';
+    return 'about ' + Math.round(secs / 60) + 'm left';
+  }
+
+  function poll() {
+    fetch(pollUrl)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.status === 'running') {
+          wrap.style.display = '';
+          var total = d.total || 1;
+          var done  = d.done  || 0;
+          var pct   = total > 0 ? Math.round(done / total * 100) : 0;
+          bar.style.width  = pct + '%';
+          cnt.textContent  = done + ' / ' + total + ' commenters';
+          eta.textContent  = fmtEta(d.eta_seconds);
+          if (d.eta_seconds) {
+            var rps = done / ((Date.now() / 1000) - (d.started_at || 0));
+            rate.textContent = '';
+          }
+          timer = setTimeout(poll, 2000);
+        } else if (d.status === 'done') {
+          bar.style.width = '100%';
+          eta.textContent = 'Done — reloading…';
+          setTimeout(function() { window.location.reload(); }, 1000);
+        } else if (d.status === 'error') {
+          wrap.style.background = '#2a0a0a';
+          eta.textContent = 'Error: ' + (d.error || 'unknown');
+          cnt.textContent = '';
+        } else {
+          wrap.style.display = 'none';
+        }
+      })
+      .catch(function() { timer = setTimeout(poll, 4000); });
+  }
+
+  {% if tone_job.status == 'running' %}
+  poll();
+  {% endif %}
+})();
+</script>
+
 {# ── Tier summary cards ─────────────────────────────────────────────────── #}
 {% set tier_labels = [('A', '#2ecc71', 'High credibility'), ('B', '#a8e6cf', 'Above average'), ('C', '#f39c12', 'Average'), ('D', '#e74c3c', 'Low credibility')] %}
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
