@@ -655,7 +655,7 @@ def commenters(community_id):
     per_page = 50
     tier_filter = request.args.get("tier", "")
     sort_by = request.args.get("sort", "quality_score")
-    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes"}:
+    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes", "reply_ratio"}:
         sort_by = "quality_score"
 
     where_clauses = ["community_id = ?"]

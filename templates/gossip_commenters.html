@@ -53,6 +53,7 @@
       <option value="channel_count"  {% if sort_by == 'channel_count'  %}selected{% endif %}>Channels</option>
       <option value="comment_count"  {% if sort_by == 'comment_count'  %}selected{% endif %}>Comments</option>
       <option value="total_likes"    {% if sort_by == 'total_likes'    %}selected{% endif %}>Total Likes</option>
+      <option value="reply_ratio"    {% if sort_by == 'reply_ratio'    %}selected{% endif %}>Reply %</option>
     </select>
     {% if tier_filter %}
     <input type="hidden" name="tier" value="{{ tier_filter }}">
