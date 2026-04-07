@@ -102,8 +102,8 @@
       <td style="padding:.6rem .75rem;text-align:right">{{ c.channel_count }}</td>
       <td style="padding:.6rem .75rem;text-align:right">{{ c.comment_count }}</td>
       <td style="padding:.6rem .75rem;text-align:right">{{ c.total_likes }}</td>
-      <td style="padding:.6rem .75rem;text-align:right;color:{% if c.reply_penalty and c.reply_penalty > 0.15 %}#e74c3c{% else %}var(--muted){% endif %}">
-        {{ ((c.reply_penalty or 0) / 0.5 * 100) | int }}%
+      <td style="padding:.6rem .75rem;text-align:right;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
+        {{ ((c.reply_ratio or 0) * 100) | int }}%
       </td>
       <td style="padding:.6rem .75rem">
         <div style="display:flex;gap:.25rem;align-items:center;font-size:.75rem;color:var(--muted)">

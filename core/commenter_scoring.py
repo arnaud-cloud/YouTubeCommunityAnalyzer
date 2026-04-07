@@ -168,6 +168,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
             "factual_anchor_score": round(factual, 4),
             "avg_length_score":     round(length_score, 4),
             "reply_penalty":        round(reply_penalty, 4),
+            "reply_ratio":          round(s["reply_ratio"], 4),
         })
 
     return enriched
@@ -199,9 +200,9 @@ def score_community(conn, community_id: int) -> int:
                (community_id, author_channel_id, author_name,
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
-                factual_anchor_score, avg_length_score, reply_penalty,
+                factual_anchor_score, avg_length_score, reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -215,6 +216,7 @@ def score_community(conn, community_id: int) -> int:
                 r["factual_anchor_score"],
                 r["avg_length_score"],
                 r["reply_penalty"],
+                r["reply_ratio"],
                 r["comment_count"],
                 r["channel_count"],
                 r["total_likes"],

@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS commenter_scores (
     factual_anchor_score REAL,
     avg_length_score     REAL,
     reply_penalty        REAL,
+    reply_ratio          REAL,
     comment_count        INTEGER,
     channel_count        INTEGER,
     total_likes          INTEGER,
