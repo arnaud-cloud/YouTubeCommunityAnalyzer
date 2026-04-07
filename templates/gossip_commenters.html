@@ -10,6 +10,13 @@
         <form method="post" action="{{ url_for('gossip.score_commenters_now', community_id=community.id) }}" style="display:inline">
             <button type="submit" class="btn btn-primary">⟳ Re-score</button>
         </form>
+        {% if has_ollama %}
+        <form method="post" action="{{ url_for('gossip.tone_score_commenters', community_id=community.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-outline" style="border-color:#a8e6cf;color:#a8e6cf" title="Rate politeness, constructiveness and depth via local LLM">🎭 LLM Tone Score</button>
+        </form>
+        {% else %}
+        <span class="btn btn-outline" style="opacity:.4;cursor:not-allowed" title="Set summarize backend to Ollama to enable LLM tone scoring">🎭 LLM Tone Score</span>
+        {% endif %}
     </div>
 </div>
 
@@ -122,6 +129,12 @@
           <span title="Like ratio">L:{{ "%.0f"|format((c.like_ratio_score or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
           <span title="Factual anchors">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
+          <span style="color:var(--border)">·</span>
+          {% if c.llm_tone_score is not none %}
+          <span title="LLM tone score — {{ c.llm_tone_reason or 'politeness + constructiveness + depth' }}" style="color:#a8e6cf">T:{{ "%.0f"|format(c.llm_tone_score * 100) }}%</span>
+          {% else %}
+          <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
+          {% endif %}
         </div>
       </td>
     </tr>
@@ -165,6 +178,8 @@
   C = channel spread (distinct channels) ·
   L = like ratio (likes per comment) ·
   F = factual anchors (URLs/dates in comments) ·
-  Reply % = proportion of replies (high = penalty applied)
+  V = vocabulary richness (word variety, proxy for analytical depth) ·
+  <span style="color:#a8e6cf">T = LLM tone score (politeness + constructiveness + depth)</span> ·
+  Reply % = proportion of replies on other channels (high = penalty applied)
 </div>
 {% endblock %}

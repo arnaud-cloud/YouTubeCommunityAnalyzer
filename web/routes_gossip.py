@@ -1,7 +1,10 @@
 """Gossip pipeline routes — trigger, status polling, report viewing."""
 
+import logging
 import math
 import threading
+
+log = logging.getLogger(__name__)
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
@@ -699,6 +702,8 @@ def commenters(community_id):
         tier_counts[r["tier"]] = r["cnt"]
 
     computed_at = rows[0]["computed_at"] if rows else None
+    settings = get_all_settings(conn)
+    has_ollama = settings.get("llm_summarize_backend", "anthropic") == "ollama"
     conn.close()
 
     return render_template(
@@ -708,6 +713,7 @@ def commenters(community_id):
         tier_counts=tier_counts,
         channel_owner_ids=set(channel_owner_ids),
         creators_only=creators_only,
+        has_ollama=has_ollama,
         page=page,
         per_page=per_page,
         total=total,
@@ -730,6 +736,33 @@ def score_commenters_now(community_id):
         flash(f"Scoring failed: {e}", "error")
     finally:
         conn.close()
+    return redirect(url_for("gossip.commenters", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/tone-score-commenters", methods=["POST"])
+def tone_score_commenters(community_id):
+    """Run Ollama LLM tone scoring pass on all scored commenters."""
+    from core.commenter_scoring import score_community, score_community_tone
+    db_path = current_app.config["DB_PATH"]
+
+    def _run():
+        conn = get_db(db_path)
+        try:
+            # Ensure algorithmic scores exist first
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
+                (community_id,),
+            ).fetchone()[0]
+            if existing == 0:
+                score_community(conn, community_id)
+            score_community_tone(conn, community_id)
+        except Exception as e:
+            log.error(f"Tone scoring failed for community {community_id}: {e}", exc_info=True)
+        finally:
+            conn.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    flash("LLM tone scoring started in the background. Refresh in a moment.", "success")
     return redirect(url_for("gossip.commenters", community_id=community_id))
 
 

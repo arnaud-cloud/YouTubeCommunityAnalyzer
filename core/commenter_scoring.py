@@ -5,14 +5,18 @@ Pure algorithmic scoring from existing DB data. No LLM calls.
 Scores are per-community (relative rankings within that community's channels).
 Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 
-Scoring formula:
+Scoring formula (algorithmic):
     quality_score = (
-        avg(engagement_normalized) / 100  * 0.35   # community validation
-      + log(channel_count+1) / log(max+1) * 0.25   # breadth of engagement
-      + like_ratio_percentile              * 0.20   # likes-per-comment within community
-      + factual_anchor_ratio               * 0.10   # URL/date mentions
-      + avg_length_score                   * 0.10   # comment thoughtfulness
-    ) * (1 - min(reply_ratio * 0.5, 0.3))           # penalty for high reply ratio
+        avg(engagement_normalized) / 100  * 0.20   # community validation
+      + channel_spread_score              * 0.20   # breadth of engagement
+      + vocab_richness_percentile         * 0.20   # varied vocabulary = analytical thinking
+      + like_ratio_percentile             * 0.10   # likes-per-comment within community
+      + factual_anchor_ratio              * 0.15   # URL/date mentions
+      + avg_length_score                  * 0.15   # comment thoughtfulness
+    ) * (1 - reply_penalty)
+
+When llm_tone_score is available (from score_community_tone()), it replaces
+vocab_richness_percentile in the formula — it's a better signal for the same slot.
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 """
@@ -20,11 +24,13 @@ Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 from __future__ import annotations
 
 import bisect
+import json
 import logging
 import math
 import re
 
-from .db import get_community_channel_ids
+from .db import get_community_channel_ids, get_all_settings
+from .llm_client import LLMClient, _settings_to_llm_config
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +44,30 @@ _FACTUAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Regex for vocabulary richness: 3+ char words, handles French accents
+_WORD_RE = re.compile(r"[a-zA-ZÀ-ÿ]{3,}")
+
+_TONE_SYSTEM_PROMPT = """\
+You are evaluating YouTube comment quality. For each commenter listed below, rate their
+overall commenting style on a 0.0–1.0 scale based on the sample comments provided.
+
+The score reflects THREE equally important dimensions — weight all three:
+  1. POLITENESS / COURTESY: Are they respectful toward creators and other commenters?
+     Do they disagree without being hostile? Do they show patience even in frustration?
+  2. CONSTRUCTIVENESS: Do they add something — a fact, a question, a nuanced point?
+     Or is it empty praise/complaint?
+  3. ANALYTICAL DEPTH: Do they engage with specifics, or stay at surface level?
+
+Score anchors:
+  0.0 = aggressive, dismissive, rude, or trollish — OR purely sycophantic with zero substance
+  0.3 = impolite or impatient even if occasionally making a point
+  0.5 = neutral, polite fan engagement — not harmful, not particularly insightful
+  0.7 = polite and constructive, engages genuinely
+  1.0 = notably courteous even under disagreement, analytical, adds real value
+
+Score each commenter independently. Respond with JSON only — no prose, no markdown fences:
+{"scores": [{"author": "<author_name>", "score": 0.0, "reason": "one sentence"}]}"""
+
 
 def _score_tier(score: float) -> str:
     if score >= 0.65:
@@ -49,10 +79,18 @@ def _score_tier(score: float) -> str:
     return "D"
 
 
+def _vocab_ttr(text: str) -> float | None:
+    """Type-token ratio for a single comment. Returns None if too short to be meaningful."""
+    words = _WORD_RE.findall(text.lower())
+    if len(words) < 5:
+        return None
+    return len(set(words)) / len(words)
+
+
 def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
     """
     Load per-commenter aggregate stats for the given channels.
-    Two passes: SQL aggregate query, then Python text scan for factual anchors.
+    Two passes: SQL aggregate query, then Python text scan for factual anchors + vocab richness.
     """
     if not channel_ids:
         return []
@@ -84,7 +122,7 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
     if not stats:
         return stats
 
-    # Build author → anchor count map via Python regex
+    # Text pass: factual anchors + vocabulary richness
     author_ids = list({s["author_channel_id"] for s in stats})
     aid_ph = ",".join("?" * len(author_ids))
     text_rows = conn.execute(
@@ -94,18 +132,29 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
     ).fetchall()
 
     anchor_counts: dict[str, list[int]] = {}
+    vocab_data: dict[str, list[float]] = {}
     for r in text_rows:
         aid = r["author_channel_id"]
-        has_anchor = 1 if _FACTUAL_RE.search(r["text"] or "") else 0
+        text = r["text"] or ""
+
+        # Factual anchors
+        has_anchor = 1 if _FACTUAL_RE.search(text) else 0
         if aid not in anchor_counts:
             anchor_counts[aid] = [0, 0]
         anchor_counts[aid][0] += has_anchor
         anchor_counts[aid][1] += 1
 
+        # Vocabulary richness
+        ttr = _vocab_ttr(text)
+        if ttr is not None:
+            vocab_data.setdefault(aid, []).append(ttr)
+
     for s in stats:
         aid = s["author_channel_id"]
         ac = anchor_counts.get(aid, [0, 1])
         s["factual_ratio"] = ac[0] / max(ac[1], 1)
+        ttrs = vocab_data.get(aid, [])
+        s["vocab_richness"] = sum(ttrs) / len(ttrs) if ttrs else 0.0
 
     return stats
 
@@ -113,6 +162,8 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
 def _compute_component_scores(stats: list[dict]) -> list[dict]:
     """
     Normalize raw stats into 0-1 sub-scores and compute the final quality_score.
+    Uses vocab_richness_score as the content-quality signal unless llm_tone_score
+    is already populated on the row (set by score_community_tone()).
     """
     if not stats:
         return []
@@ -120,10 +171,11 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
     max_channels = max(s["channel_count"] for s in stats)
     log_max = math.log(max_channels + 1)
 
-    # Build sorted like-per-comment list for percentile computation
+    # Percentile lists
     like_per_comment_vals = sorted(
         s["total_likes"] / max(s["comment_count"], 1) for s in stats
     )
+    vocab_vals = sorted(s.get("vocab_richness", 0.0) for s in stats)
     n = len(like_per_comment_vals)
 
     enriched = []
@@ -134,7 +186,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         # 2. Channel spread: log scale, relative to max in community
         ch_spread = math.log(s["channel_count"] + 1) / log_max if log_max > 0 else 0.0
 
-        # 3. Like-per-comment percentile (bisect for O(log n), handles ties)
+        # 3. Like-per-comment percentile
         lpc = s["total_likes"] / max(s["comment_count"], 1)
         rank = bisect.bisect_left(like_per_comment_vals, lpc)
         like_ratio = rank / (n - 1) if n > 1 else 0.5
@@ -151,15 +203,25 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         else:
             length_score = max(0.0, 1.0 - (avg_len - 300) / 500.0)
 
-        # 6. Reply penalty
+        # 6. Vocabulary richness percentile
+        vr = s.get("vocab_richness", 0.0)
+        vrank = bisect.bisect_left(vocab_vals, vr)
+        vocab_score = vrank / (n - 1) if n > 1 else 0.5
+
+        # 7. Reply penalty (external channels only)
         reply_penalty = min(s["reply_ratio"] * 0.5, 0.3)
 
+        # Content-quality slot: use LLM tone score when available, else vocab richness
+        llm_tone = s.get("llm_tone_score")
+        content_score = float(llm_tone) if llm_tone is not None else vocab_score
+
         raw = (
-            eng_score   * 0.35
-            + ch_spread * 0.25
-            + like_ratio * 0.20
-            + factual    * 0.10
-            + length_score * 0.10
+            eng_score      * 0.20
+            + ch_spread    * 0.20
+            + content_score * 0.20
+            + like_ratio   * 0.10
+            + factual      * 0.15
+            + length_score * 0.15
         )
         quality_score = round(min(max(raw * (1.0 - reply_penalty), 0.0), 1.0), 4)
 
@@ -172,6 +234,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
             "like_ratio_score":     round(like_ratio, 4),
             "factual_anchor_score": round(factual, 4),
             "avg_length_score":     round(length_score, 4),
+            "vocab_richness_score": round(vocab_score, 4),
             "reply_penalty":        round(reply_penalty, 4),
             "reply_ratio":          round(s["reply_ratio"], 4),
         })
@@ -181,8 +244,8 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
 
 def score_community(conn, community_id: int) -> int:
     """
-    Compute and cache credibility scores for all commenters in the community.
-    Clears existing scores for the community before inserting fresh ones.
+    Compute and cache algorithmic credibility scores for all commenters in the community.
+    Preserves existing llm_tone_score / llm_tone_reason values if present.
     Returns the number of commenters scored.
     """
     channel_ids = get_community_channel_ids(conn, community_id)
@@ -195,6 +258,21 @@ def score_community(conn, community_id: int) -> int:
         log.info(f"commenter_scoring: no comments found for community {community_id}")
         return 0
 
+    # Preserve existing LLM tone scores across re-scoring
+    existing_tone: dict[str, dict] = {
+        r["author_channel_id"]: {"score": r["llm_tone_score"], "reason": r["llm_tone_reason"]}
+        for r in conn.execute(
+            "SELECT author_channel_id, llm_tone_score, llm_tone_reason "
+            "FROM commenter_scores WHERE community_id = ? AND llm_tone_score IS NOT NULL",
+            (community_id,),
+        ).fetchall()
+    }
+    for s in stats:
+        tone = existing_tone.get(s["author_channel_id"])
+        if tone:
+            s["llm_tone_score"] = tone["score"]
+            s["llm_tone_reason"] = tone["reason"]
+
     enriched = _compute_component_scores(stats)
 
     conn.execute(
@@ -205,9 +283,11 @@ def score_community(conn, community_id: int) -> int:
                (community_id, author_channel_id, author_name,
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
-                factual_anchor_score, avg_length_score, reply_penalty, reply_ratio,
+                factual_anchor_score, avg_length_score, vocab_richness_score,
+                llm_tone_score, llm_tone_reason,
+                reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -220,6 +300,9 @@ def score_community(conn, community_id: int) -> int:
                 r["like_ratio_score"],
                 r["factual_anchor_score"],
                 r["avg_length_score"],
+                r["vocab_richness_score"],
+                r.get("llm_tone_score"),
+                r.get("llm_tone_reason"),
                 r["reply_penalty"],
                 r["reply_ratio"],
                 r["comment_count"],
@@ -235,6 +318,189 @@ def score_community(conn, community_id: int) -> int:
         f"for community {community_id}"
     )
     return len(enriched)
+
+
+def score_community_tone(conn, community_id: int,
+                         progress_callback=None) -> int:
+    """
+    Run an Ollama LLM pass to score tone (politeness + constructiveness + depth)
+    for all commenters in the community. Updates llm_tone_score and llm_tone_reason,
+    then recomputes quality_score / tier using the LLM score in the content slot.
+
+    Requires commenter scores to already exist (call score_community() first).
+    Returns number of commenters scored.
+    """
+    settings = get_all_settings(conn)
+    summarize_backend = settings.get("llm_summarize_backend", "anthropic")
+    if summarize_backend != "ollama":
+        raise ValueError(
+            f"LLM tone scoring requires Ollama backend "
+            f"(current summarize backend: {summarize_backend!r})"
+        )
+
+    cfg = _settings_to_llm_config(settings)
+    llm = LLMClient(cfg, role="summarize")
+
+    # Load all scored commenters for this community
+    rows = conn.execute(
+        "SELECT author_channel_id, author_name FROM commenter_scores "
+        "WHERE community_id = ? ORDER BY quality_score DESC",
+        (community_id,),
+    ).fetchall()
+    if not rows:
+        return 0
+
+    channel_ids = get_community_channel_ids(conn, community_id)
+    ph = ",".join("?" * len(channel_ids))
+
+    BATCH_SIZE = 10
+    COMMENTS_PER_AUTHOR = 8
+    total_scored = 0
+
+    for batch_start in range(0, len(rows), BATCH_SIZE):
+        batch = rows[batch_start: batch_start + BATCH_SIZE]
+        author_ids = [r["author_channel_id"] for r in batch]
+        aid_ph = ",".join("?" * len(author_ids))
+
+        # Fetch top comments per author
+        comments_by_author: dict[str, list[str]] = {r["author_channel_id"]: [] for r in batch}
+        for cr in conn.execute(
+            f"SELECT author_channel_id, text FROM comments "
+            f"WHERE channel_id IN ({ph}) AND author_channel_id IN ({aid_ph}) "
+            f"AND text IS NOT NULL AND LENGTH(text) > 10 "
+            f"ORDER BY like_count DESC",
+            channel_ids + author_ids,
+        ).fetchall():
+            aid = cr["author_channel_id"]
+            if len(comments_by_author.get(aid, [])) < COMMENTS_PER_AUTHOR:
+                comments_by_author.setdefault(aid, []).append(cr["text"])
+
+        # Build user prompt
+        sections = []
+        author_name_map = {r["author_channel_id"]: r["author_name"] for r in batch}
+        for r in batch:
+            aid = r["author_channel_id"]
+            name = author_name_map[aid] or aid
+            comments = comments_by_author.get(aid, [])
+            if not comments:
+                continue
+            comment_block = "\n".join(f"  - {c[:200]}" for c in comments)
+            sections.append(f"COMMENTER: {name}\nCOMMENTS:\n{comment_block}")
+
+        if not sections:
+            continue
+
+        user_prompt = (
+            f"Rate the following {len(sections)} commenter(s).\n\n"
+            + "\n\n".join(sections)
+        )
+
+        if progress_callback:
+            progress_callback(
+                f"Tone scoring batch {batch_start // BATCH_SIZE + 1}/"
+                f"{math.ceil(len(rows) / BATCH_SIZE)}: {len(sections)} commenters"
+            )
+
+        try:
+            result = llm.complete_json(_TONE_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
+        except Exception as e:
+            log.warning(f"commenter_scoring: tone batch failed: {e}")
+            continue
+
+        scores = result.get("scores", []) if isinstance(result, dict) else []
+
+        # Match results back by author name
+        name_to_aid = {(r["author_name"] or r["author_channel_id"]): r["author_channel_id"]
+                       for r in batch}
+        for item in scores:
+            author_name = item.get("author", "")
+            tone_score = item.get("score")
+            reason = item.get("reason", "")
+            aid = name_to_aid.get(author_name)
+            if aid is None or tone_score is None:
+                continue
+            try:
+                tone_score = float(tone_score)
+                tone_score = round(min(max(tone_score, 0.0), 1.0), 4)
+            except (TypeError, ValueError):
+                continue
+            conn.execute(
+                "UPDATE commenter_scores SET llm_tone_score = ?, llm_tone_reason = ? "
+                "WHERE community_id = ? AND author_channel_id = ?",
+                (tone_score, reason, community_id, aid),
+            )
+            total_scored += 1
+
+        conn.commit()
+
+    if total_scored == 0:
+        return 0
+
+    # Recompute quality_score / tier now that LLM scores are stored
+    # Load fresh stats (existing rows already have llm_tone_score set)
+    stats = _load_commenter_stats(conn, channel_ids)
+    if not stats:
+        return total_scored
+
+    tone_map: dict[str, dict] = {
+        r["author_channel_id"]: {"llm_tone_score": r["llm_tone_score"], "llm_tone_reason": r["llm_tone_reason"]}
+        for r in conn.execute(
+            "SELECT author_channel_id, llm_tone_score, llm_tone_reason "
+            "FROM commenter_scores WHERE community_id = ?",
+            (community_id,),
+        ).fetchall()
+    }
+    for s in stats:
+        t = tone_map.get(s["author_channel_id"], {})
+        if t.get("llm_tone_score") is not None:
+            s["llm_tone_score"] = t["llm_tone_score"]
+            s["llm_tone_reason"] = t["llm_tone_reason"]
+
+    enriched = _compute_component_scores(stats)
+
+    conn.execute(
+        "DELETE FROM commenter_scores WHERE community_id = ?", (community_id,)
+    )
+    conn.executemany(
+        """INSERT INTO commenter_scores
+               (community_id, author_channel_id, author_name,
+                quality_score, tier,
+                avg_engagement_norm, channel_spread_score, like_ratio_score,
+                factual_anchor_score, avg_length_score, vocab_richness_score,
+                llm_tone_score, llm_tone_reason,
+                reply_penalty, reply_ratio,
+                comment_count, channel_count, total_likes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [
+            (
+                community_id,
+                r["author_channel_id"],
+                r["author_name"],
+                r["quality_score"],
+                r["tier"],
+                r["avg_eng_score"],
+                r["channel_spread_score"],
+                r["like_ratio_score"],
+                r["factual_anchor_score"],
+                r["avg_length_score"],
+                r["vocab_richness_score"],
+                r.get("llm_tone_score"),
+                r.get("llm_tone_reason"),
+                r["reply_penalty"],
+                r["reply_ratio"],
+                r["comment_count"],
+                r["channel_count"],
+                r["total_likes"],
+            )
+            for r in enriched
+        ],
+    )
+    conn.commit()
+    log.info(
+        f"commenter_scoring: tone-scored {total_scored} commenters "
+        f"for community {community_id}"
+    )
+    return total_scored
 
 
 def get_scores_for_community(conn, community_id: int) -> dict[str, dict]:

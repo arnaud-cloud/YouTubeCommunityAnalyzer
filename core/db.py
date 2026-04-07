@@ -74,10 +74,16 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "source_type" not in videos_cols:
         conn.execute("ALTER TABLE videos ADD COLUMN source_type TEXT DEFAULT 'youtube'")
 
-    # commenter_scores: reply_ratio column
+    # commenter_scores: new columns
     cs_cols = {row[1] for row in conn.execute("PRAGMA table_info(commenter_scores)")}
     if "reply_ratio" not in cs_cols:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN reply_ratio REAL")
+    if "vocab_richness_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN vocab_richness_score REAL")
+    if "llm_tone_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_score REAL")
+    if "llm_tone_reason" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_reason TEXT")
 
     # gossip_items: evidence_quality_score column
     gi_cols = {row[1] for row in conn.execute("PRAGMA table_info(gossip_items)")}
