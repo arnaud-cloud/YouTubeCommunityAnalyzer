@@ -6,24 +6,19 @@ Scores are per-community (relative rankings within that community's channels).
 Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 
 Scoring formula:
-    When llm_tone_score is available:
-    quality_score = (
-        avg(engagement_normalized) / 100  * 0.25   # community validation
-      + llm_tone_score                    * 0.20   # substance (constructiveness + depth)
-      + vocab_richness_percentile         * 0.05   # varied vocabulary
-      + like_ratio_percentile             * 0.10   # likes-per-comment within community
-      + factual_anchor_ratio              * 0.20   # URL/date mentions
-      + avg_length_score                  * 0.20   # comment thoughtfulness
-    ) * (1 - reply_penalty)
+    content_score (with llm_tone_score):
+        eng * 0.25 + llm_tone * 0.20 + factual * 0.20 + length * 0.20 + like_ratio * 0.10 + vocab * 0.05
 
-    Without llm_tone_score (algorithmic only):
-    quality_score = (
-        avg(engagement_normalized) / 100  * 0.25
-      + vocab_richness_percentile         * 0.25
-      + like_ratio_percentile             * 0.10
-      + factual_anchor_ratio              * 0.20
-      + avg_length_score                  * 0.20
-    ) * (1 - reply_penalty)
+    content_score (algorithmic only):
+        eng * 0.25 + vocab * 0.25 + factual * 0.20 + length * 0.20 + like_ratio * 0.10
+
+    When llm_defensiveness_score is available (creators):
+        raw = content_score * 0.50 + (1 - defensiveness) * 0.50
+
+    Otherwise:
+        raw = content_score
+
+    quality_score = raw * (1 - reply_penalty)
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 """
@@ -482,14 +477,10 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         # 7. Reply penalty (external channels only)
         reply_penalty = min(s["reply_ratio"] * 0.5, 0.3)
 
-        # 8. Defensiveness penalty (creators only; NULL for unassessed commenters)
-        defensiveness = s.get("llm_defensiveness_score")
-        defensiveness_penalty = min(float(defensiveness) * 0.4, 0.4) if defensiveness is not None else 0.0
-
-        # Content-quality: combine T% + V% when both available, else V% alone
+        # 8. Content score (0-1) — signals of comment quality
         llm_tone = s.get("llm_tone_score")
         if llm_tone is not None:
-            raw = (
+            content = (
                 eng_score         * 0.25
                 + float(llm_tone) * 0.20
                 + vocab_score     * 0.05
@@ -498,15 +489,26 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
                 + length_score    * 0.20
             )
         else:
-            raw = (
+            content = (
                 eng_score     * 0.25
                 + vocab_score * 0.25
                 + like_ratio  * 0.10
                 + factual     * 0.20
                 + length_score* 0.20
             )
+
+        # 9. Defensiveness (creators only; NULL = not yet assessed)
+        #    When present, it counts for 50% of the total score:
+        #      final = content * 0.50 + (1 - defensiveness) * 0.50
+        #    When absent, use content score as-is.
+        defensiveness = s.get("llm_defensiveness_score")
+        if defensiveness is not None:
+            raw = content * 0.50 + (1.0 - float(defensiveness)) * 0.50
+        else:
+            raw = content
+
         quality_score = round(
-            min(max(raw * (1.0 - reply_penalty) * (1.0 - defensiveness_penalty), 0.0), 1.0), 4
+            min(max(raw * (1.0 - reply_penalty), 0.0), 1.0), 4
         )
 
         enriched.append({
