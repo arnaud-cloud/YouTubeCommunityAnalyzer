@@ -556,7 +556,11 @@ def score_community_tone(conn, community_id: int,
                     return s if isinstance(s, list) else [s]
                 if "index" in result or "score" in result:
                     return [result]
-                log.warning(f"commenter_scoring: unrecognised result shape — keys: {list(result.keys())}")
+                _REFUSAL_KEYS = {"code", "system", "message", "error", "response", "text"}
+                if result.keys() & _REFUSAL_KEYS:
+                    log.warning(f"commenter_scoring: model refusal (keys: {list(result.keys())}), will retry individually")
+                else:
+                    log.warning(f"commenter_scoring: unrecognised result shape — keys: {list(result.keys())}")
                 return None
             log.warning(f"commenter_scoring: unexpected result type {type(result)}")
             return None
