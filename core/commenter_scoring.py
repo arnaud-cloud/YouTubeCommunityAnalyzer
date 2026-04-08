@@ -1009,8 +1009,8 @@ def _score_creator_detailed(
 ) -> bool:
     """
     Deep-analyze one creator's comments.
-    ≤500 comments: all in batches of 50 → consolidation call.
-    >500 comments: chunks of 100 → convergence detection (delta < 0.05).
+    ≤1000 comments: all in batches of 50 → consolidation call.
+    >1000 comments: chunks of 100 → convergence detection (delta < 0.05).
     Returns True if scored successfully.
     """
     ph = ",".join("?" * len(channel_ids))
@@ -1051,7 +1051,7 @@ def _score_creator_detailed(
             log.warning(f"commenter_scoring: creator batch failed for {author_name}: {e}")
             return None
 
-    if total <= 500:
+    if total <= 1000:
         BATCH = 50
         batch_results = []
         for start in range(0, total, BATCH):
