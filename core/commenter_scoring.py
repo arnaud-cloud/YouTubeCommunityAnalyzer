@@ -7,10 +7,10 @@ Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 
 Scoring formula:
     content_score (with llm_tone_score):
-        llm_tone * 0.35 + length * 0.30 + like_ratio * 0.20 + vocab * 0.15
+        llm_tone * 0.40 + length * 0.35 + like_ratio * 0.25
 
     content_score (algorithmic only):
-        vocab * 0.40 + length * 0.35 + like_ratio * 0.25
+        length * 0.60 + like_ratio * 0.40
 
     When llm_defensiveness_score is available (creators):
         quality_score = content_score * 0.50 + (1 - defensiveness) * 0.50
@@ -18,7 +18,8 @@ Scoring formula:
     Otherwise:
         quality_score = content_score
 
-    Engagement (eng) is displayed in the table but not included in the score.
+    Engagement (eng) and vocabulary richness (vcb) are displayed in the
+    table but not included in the score.
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 """
@@ -448,20 +449,18 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         vrank = bisect.bisect_left(vocab_vals, vr)
         vocab_score = vrank / (n - 1) if n > 1 else 0.5
 
-        # 7. Content score (0-1) — engagement displayed but not scored
+        # 7. Content score (0-1) — eng and vocab displayed but not scored
         llm_tone = s.get("llm_tone_score")
         if llm_tone is not None:
             content = (
-                float(llm_tone) * 0.35
-                + length_score  * 0.30
-                + like_ratio    * 0.20
-                + vocab_score   * 0.15
+                float(llm_tone) * 0.40
+                + length_score  * 0.35
+                + like_ratio    * 0.25
             )
         else:
             content = (
-                vocab_score  * 0.40
-                + length_score * 0.35
-                + like_ratio   * 0.25
+                length_score * 0.60
+                + like_ratio * 0.40
             )
 
         # 9. Defensiveness (creators only; NULL = not yet assessed)
