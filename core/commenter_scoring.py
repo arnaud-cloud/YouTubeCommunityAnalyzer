@@ -8,23 +8,21 @@ Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 Scoring formula:
     When llm_tone_score is available:
     quality_score = (
-        avg(engagement_normalized) / 100  * 0.20   # community validation
-      + channel_spread_score              * 0.20   # breadth of engagement
-      + llm_tone_score                    * 0.15   # politeness + constructiveness + depth
+        avg(engagement_normalized) / 100  * 0.25   # community validation
+      + llm_tone_score                    * 0.20   # substance (constructiveness + depth)
       + vocab_richness_percentile         * 0.05   # varied vocabulary
       + like_ratio_percentile             * 0.10   # likes-per-comment within community
-      + factual_anchor_ratio              * 0.15   # URL/date mentions
-      + avg_length_score                  * 0.15   # comment thoughtfulness
+      + factual_anchor_ratio              * 0.20   # URL/date mentions
+      + avg_length_score                  * 0.20   # comment thoughtfulness
     ) * (1 - reply_penalty)
 
     Without llm_tone_score (algorithmic only):
     quality_score = (
-        avg(engagement_normalized) / 100  * 0.20
-      + channel_spread_score              * 0.20
-      + vocab_richness_percentile         * 0.20
+        avg(engagement_normalized) / 100  * 0.25
+      + vocab_richness_percentile         * 0.25
       + like_ratio_percentile             * 0.10
-      + factual_anchor_ratio              * 0.15
-      + avg_length_score                  * 0.15
+      + factual_anchor_ratio              * 0.20
+      + avg_length_score                  * 0.20
     ) * (1 - reply_penalty)
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
@@ -35,7 +33,6 @@ from __future__ import annotations
 import bisect
 import json
 import logging
-import math
 import re
 
 from .db import get_community_channel_ids, get_all_settings
@@ -448,9 +445,6 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
     if not stats:
         return []
 
-    max_channels = max(s["channel_count"] for s in stats)
-    log_max = math.log(max_channels + 1)
-
     # Percentile lists
     like_per_comment_vals = sorted(
         s["total_likes"] / max(s["comment_count"], 1) for s in stats
@@ -463,10 +457,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         # 1. Engagement normalization (0-100 scale → 0-1)
         eng_score = min(s["avg_engagement_norm"] / 100.0, 1.0)
 
-        # 2. Channel spread: log scale, relative to max in community
-        ch_spread = math.log(s["channel_count"] + 1) / log_max if log_max > 0 else 0.0
-
-        # 3. Like-per-comment percentile
+        # 2. Like-per-comment percentile
         lpc = s["total_likes"] / max(s["comment_count"], 1)
         rank = bisect.bisect_left(like_per_comment_vals, lpc)
         like_ratio = rank / (n - 1) if n > 1 else 0.5
@@ -499,22 +490,20 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         llm_tone = s.get("llm_tone_score")
         if llm_tone is not None:
             raw = (
-                eng_score        * 0.20
-                + ch_spread      * 0.20
-                + float(llm_tone) * 0.15
-                + vocab_score    * 0.05
-                + like_ratio     * 0.10
-                + factual        * 0.15
-                + length_score   * 0.15
+                eng_score         * 0.25
+                + float(llm_tone) * 0.20
+                + vocab_score     * 0.05
+                + like_ratio      * 0.10
+                + factual         * 0.20
+                + length_score    * 0.20
             )
         else:
             raw = (
-                eng_score        * 0.20
-                + ch_spread      * 0.20
-                + vocab_score    * 0.20
-                + like_ratio     * 0.10
-                + factual        * 0.15
-                + length_score   * 0.15
+                eng_score     * 0.25
+                + vocab_score * 0.25
+                + like_ratio  * 0.10
+                + factual     * 0.20
+                + length_score* 0.20
             )
         quality_score = round(
             min(max(raw * (1.0 - reply_penalty) * (1.0 - defensiveness_penalty), 0.0), 1.0), 4
@@ -525,7 +514,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
             "quality_score":        quality_score,
             "tier":                 _score_tier(quality_score),
             "avg_eng_score":        round(eng_score, 4),
-            "channel_spread_score": round(ch_spread, 4),
+            "channel_spread_score": 0.0,
             "like_ratio_score":     round(like_ratio, 4),
             "factual_anchor_score": round(factual, 4),
             "avg_length_score":     round(length_score, 4),
