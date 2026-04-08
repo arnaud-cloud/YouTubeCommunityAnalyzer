@@ -489,7 +489,14 @@ def score_community_tone(conn, community_id: int,
     # Load scored commenters, filtered by scope and skip already-processed
     query = (
         "SELECT author_channel_id, author_name, llm_tone_backend, llm_tone_model "
-        "FROM commenter_scores WHERE community_id = ? ORDER BY quality_score DESC"
+        "FROM commenter_scores cs WHERE community_id = ? "
+        "ORDER BY ("
+        "  SELECT 1 FROM community_sources s "
+        "  WHERE s.community_id = cs.community_id AND s.source_id = cs.author_channel_id "
+        "  UNION SELECT 1 FROM community_channels c "
+        "  WHERE c.community_id = cs.community_id AND c.channel_id = cs.author_channel_id "
+        "  LIMIT 1"
+        ") DESC NULLS LAST, quality_score DESC"
     )
     all_rows = conn.execute(query, (community_id,)).fetchall()
 
