@@ -144,8 +144,7 @@
         ('llm_tone_score',         'Substance (T)'),
         ('vocab_richness_score',   'Vocab (V)'),
         ('llm_defensiveness_score','Defensiveness (D)'),
-        ('avg_engagement_norm',    'Engagement (E)'),
-        ('like_ratio_score',       'Like Ratio (L)'),
+        ('like_ratio_score',       'Like%'),
         ('comment_count',          'Comments'),
         ('total_likes',            'Total Likes'),
       ] %}
@@ -186,8 +185,7 @@
       <th style="padding:.4rem .5rem;min-width:110px">Score</th>
       <th style="padding:.4rem .4rem;text-align:right">Cmts</th>
       <th style="padding:.4rem .4rem;text-align:right">Likes</th>
-      <th style="padding:.4rem .4rem;text-align:right" title="Engagement — normalized engagement (likes/views) across videos this commenter posted on">Eng</th>
-      <th style="padding:.4rem .4rem;text-align:right" title="Like Ratio — percentile rank of average likes per comment within this community">LRat</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Like% — percentile rank of average likes per comment within this community">Like%</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Vocabulary Richness — type-token ratio percentile: how varied their word choice is. High = diverse/analytical. Low = repetitive/sycophantic.">Vcb</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Substance (LLM) — AI-assessed constructiveness + analytical depth. 0 = pure sycophancy, 1 = highly analytical.">Sub</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Defensiveness &amp; Bragging (LLM) — detects defensive reactions to criticism and unprompted self-promotion. Lower is better.">Def</th>
@@ -222,8 +220,6 @@
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.comment_count }}</td>
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.total_likes }}</td>
       {# Metric cells — data-col + data-val enable client-side percentile coloring #}
-      {% set eng = c.avg_engagement_norm or 0 %}
-      <td class="mc" data-col="eng" data-val="{{ eng }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(eng * 100) }}%</td>
       {% set lrat = c.like_ratio_score or 0 %}
       <td class="mc" data-col="lrat" data-val="{{ lrat }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(lrat * 100) }}%</td>
       {% set v_raw = c.vocab_richness_score or 0 %}
@@ -445,13 +441,13 @@
   <strong style="color:var(--text)">Formula — content score</strong> (sums to 100%):
   <span style="color:#a8e6cf">T = LLM Substance (40%)</span> +
   Len = comment length (35%) +
-  LRat = like ratio / comment (25%).
-  <em>Without LLM:</em> Len 60% + LRat 40%.
+  Like% = likes per comment percentile (25%).
+  <em>Without LLM:</em> Len 60% + Like% 40%.
   &nbsp;·&nbsp;
   <strong style="color:var(--text)">For creators with Defensiveness scored:</strong>
   final = content × 50% + (1 − <span style="color:#e74c3c">D</span>) × 50%.
   &nbsp;·&nbsp;
   <strong style="color:var(--text)">Info only (not scored):</strong>
-  Eng = engagement · Vcb = vocabulary richness.
+  Vcb = vocabulary richness (info only).
 </div>
 {% endblock %}

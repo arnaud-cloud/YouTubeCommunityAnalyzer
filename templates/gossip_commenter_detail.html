@@ -68,12 +68,12 @@
       </div>
     </div>
 
-    {# LRat — Like ratio — 25% (with LLM) or 40% (without) #}
+    {# Like — Like ratio — 25% (with LLM) or 40% (without) #}
     {% set l_pct = (score.like_ratio_score * 100) | int %}
     {% set l_weight = "25%" if score.llm_tone_score is not none else "40%" %}
     <div style="margin-bottom:.6rem">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Percentile rank of average likes per comment within this community. {{ l_weight }} of content score.">LRat — Like ratio <span style="font-weight:400;font-size:.72rem">({{ l_weight }})</span></span>
+        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Percentile rank of average likes per comment within this community. {{ l_weight }} of content score.">Like% — likes/comment <span style="font-weight:400;font-size:.72rem">({{ l_weight }})</span></span>
         <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
           <div style="width:{{ l_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
         </div>
@@ -104,18 +104,6 @@
 
     {# ── Info only (not scored) ──────────────────────────────────── #}
     <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.4rem;margin-top:.6rem">Info only — not scored</div>
-
-    {# E — Engagement #}
-    {% set e_pct = (score.avg_engagement_norm * 100) | int %}
-    <div style="margin-bottom:.4rem">
-      <div style="display:flex;align-items:center;gap:.5rem">
-        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Normalized engagement across videos (likes/views). Displayed for context only.">E — Engagement</span>
-        <div style="flex:1;background:var(--border);border-radius:3px;height:4px;overflow:hidden">
-          <div style="width:{{ e_pct }}%;height:100%;background:var(--border);filter:brightness(2);border-radius:3px"></div>
-        </div>
-        <span style="width:32px;text-align:right;font-size:.8rem;color:var(--muted)">{{ e_pct }}%</span>
-      </div>
-    </div>
 
     {# V — Vocabulary richness #}
     {% set v_raw = score.vocab_richness_score or 0 %}

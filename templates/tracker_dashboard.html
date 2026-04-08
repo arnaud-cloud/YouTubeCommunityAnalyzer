@@ -630,9 +630,8 @@ function renderToneCard(channelFilter) {
         return v >= 0.65 ? '#2ecc71' : v >= 0.35 ? '#f39c12' : '#e74c3c';
     }
     const bars = [
-        ['Engagement',    Math.round((s.avg_engagement_norm || 0) * 100), 'var(--accent)'],
         ['Channel spread',Math.round((s.channel_spread_score || 0) * 100), 'var(--accent)'],
-        ['Like ratio',    Math.round((s.like_ratio_score || 0) * 100), 'var(--accent)'],
+        ['Like%',         Math.round((s.like_ratio_score || 0) * 100), 'var(--accent)'],
         ['Avg length',    Math.round((s.avg_length_score || 0) * 100), 'var(--accent)'],
         ['Vocab richness',Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'],
     ];
