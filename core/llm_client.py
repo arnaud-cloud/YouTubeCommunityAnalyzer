@@ -105,7 +105,8 @@ class LLMClient:
             )
 
     def complete(self, system: str, user: str,
-                 max_tokens: int | None = None) -> str:
+                 max_tokens: int | None = None,
+                 json_mode: bool = False) -> str:
         tokens = max_tokens if max_tokens is not None else self.max_tokens
         if self.backend == "anthropic":
             response = self._client.messages.create(
@@ -123,6 +124,8 @@ class LLMClient:
                 "stream": False,
                 "options": {"temperature": self.temperature, "num_predict": tokens},
             }
+            if json_mode:
+                payload["format"] = "json"
             r = self._requests.post(
                 f"{self._ollama_url}/api/generate", json=payload, timeout=120
             )
@@ -150,7 +153,7 @@ class LLMClient:
 
     def complete_json(self, system: str, user: str,
                       max_tokens: int | None = None) -> Any:
-        raw = self.complete(system, user, max_tokens=max_tokens)
+        raw = self.complete(system, user, max_tokens=max_tokens, json_mode=True)
         cleaned = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
 
         try:
