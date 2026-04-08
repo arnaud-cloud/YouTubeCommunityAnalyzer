@@ -442,13 +442,16 @@
 {% endif %}
 
 <div style="margin-top:2rem;padding:1rem;background:var(--surface);border-radius:8px;border:1px solid var(--border);font-size:.82rem;color:var(--muted)">
-  <strong style="color:var(--text)">Score breakdown:</strong>
-  E = engagement (avg likes percentile) ·
-  C = channel spread (distinct channels) ·
-  L = like ratio (likes per comment) ·
-  F = factual anchors (URLs/dates in comments) ·
-  V = vocabulary richness (word variety, proxy for analytical depth) ·
-  <span style="color:#a8e6cf">T = LLM tone score (politeness + constructiveness + depth)</span> ·
-  Reply % = proportion of replies on other channels (high = penalty applied)
+  <strong style="color:var(--text)">Formula — content score</strong> (sums to 100%):
+  <span style="color:#a8e6cf">T = LLM Substance (40%)</span> +
+  Len = comment length (35%) +
+  LRat = like ratio / comment (25%).
+  <em>Without LLM:</em> Len 60% + LRat 40%.
+  &nbsp;·&nbsp;
+  <strong style="color:var(--text)">For creators with Defensiveness scored:</strong>
+  final = content × 50% + (1 − <span style="color:#e74c3c">D</span>) × 50%.
+  &nbsp;·&nbsp;
+  <strong style="color:var(--text)">Info only (not scored):</strong>
+  Eng = engagement · Vcb = vocabulary richness.
 </div>
 {% endblock %}
