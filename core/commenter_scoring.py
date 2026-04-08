@@ -456,13 +456,23 @@ def score_community_tone(conn, community_id: int,
             log.warning(f"commenter_scoring: tone batch failed: {e}")
             continue
 
-        if not isinstance(result, dict):
+        # Normalise result into a list of score items regardless of wrapper shape
+        if isinstance(result, list):
+            # Model returned a bare array: [{index, score, reason}, ...]
+            scores = result
+        elif isinstance(result, dict):
+            if "scores" in result:
+                scores = result["scores"]
+                if not isinstance(scores, list):
+                    scores = [scores]
+            elif "index" in result or "score" in result:
+                # Model returned a single flat object instead of a wrapped array
+                scores = [result]
+            else:
+                log.warning(f"commenter_scoring: unrecognised result shape — keys: {list(result.keys())}, full: {result!r}")
+                continue
+        else:
             log.warning(f"commenter_scoring: unexpected result type {type(result)}: {result!r}")
-            continue
-
-        scores = result.get("scores", [])
-        if not isinstance(scores, list):
-            log.warning(f"commenter_scoring: 'scores' is not a list — full result: {result!r}")
             continue
 
         matched = 0
