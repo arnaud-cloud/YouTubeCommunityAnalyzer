@@ -164,6 +164,148 @@ _TONE_PROMPTS = {
     "english": _TONE_SYSTEM_PROMPT,
 }
 
+# ── Single-creator deep analysis prompts ────────────────────────────────────
+
+_CREATOR_BATCH_PROMPT = """\
+IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
+
+You are performing an in-depth analysis of a single YouTube creator's commenting behavior.
+You will receive one batch of their comments and rate them on three dimensions.
+
+Rate this creator on a 0.0–1.0 scale for this batch:
+
+  1. POLITENESS / COURTESY: Are they respectful in their interactions?
+     Humor, lightness, and good-natured irony are signs of politeness, not flaws.
+     Only aggression, contempt, or personal attacks justify a low score.
+     Anchors:
+       0.0 = aggressive, contemptuous, personal attacks
+       0.5 = neutral, neither warm nor cold
+       1.0 = warm, kind, creates a positive atmosphere
+
+  2. CONSTRUCTIVENESS: Do their comments add value to the conversation?
+     Anchors:
+       0.0 = purely promotional, self-serving, or content-free
+       0.5 = neutral engagement with no particular value
+       1.0 = adds facts, questions, nuance, or genuine insight
+
+  3. ANALYTICAL DEPTH: Do they engage with specifics or stay at surface level?
+     Anchors:
+       0.0 = no analysis, purely emotional or promotional
+       0.5 = some detail but stays superficial
+       1.0 = precise analysis, specific references, developed reasoning
+
+Respond with JSON only:
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "one sentence characterizing this batch"}"""
+
+_CREATOR_BATCH_PROMPT_FR = """\
+IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
+
+Vous effectuez une analyse approfondie du comportement de commentaires d'un seul créateur YouTube.
+Vous recevrez un lot de leurs commentaires et les évaluerez sur trois dimensions.
+
+Évaluez ce créateur sur une échelle de 0,0 à 1,0 pour ce lot :
+
+  1. POLITESSE / COURTOISIE : Est-il respectueux dans ses interactions ?
+     L'humour, la légèreté et l'ironie bienveillante sont des signes de politesse, pas des défauts.
+     Seuls l'agressivité, le mépris ou les attaques personnelles justifient une note basse.
+     Ancres :
+       0,0 = agressif, méprisant, attaques personnelles
+       0,5 = neutre, ni chaleureux ni froid
+       1,0 = chaleureux, bienveillant, crée une atmosphère positive
+
+  2. CONSTRUCTIVITÉ : Ses commentaires apportent-ils de la valeur à la conversation ?
+     Ancres :
+       0,0 = purement promotionnel, égocentrique ou sans contenu
+       0,5 = engagement neutre sans valeur particulière
+       1,0 = apporte des faits, questions, nuances ou une vraie perspicacité
+
+  3. PROFONDEUR ANALYTIQUE : S'engage-t-il sur des points précis ou reste-t-il en surface ?
+     Ancres :
+       0,0 = aucune analyse, purement émotionnel ou promotionnel
+       0,5 = quelques détails mais superficiel
+       1,0 = analyse précise, références spécifiques, raisonnement développé
+
+Répondez uniquement en JSON :
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "une phrase caractérisant ce lot"}"""
+
+_CREATOR_BATCH_PROMPT_ES = """\
+IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
+
+Estás realizando un análisis detallado del comportamiento de comentarios de un único creador de YouTube.
+Recibirás un lote de sus comentarios y los evaluarás en tres dimensiones.
+
+Evalúa a este creador en una escala de 0,0 a 1,0 para este lote:
+
+  1. AMABILIDAD / CORTESÍA: ¿Es respetuoso en sus interacciones?
+     El humor, la ligereza y la ironía benévola son signos de cortesía, no defectos.
+     Solo la agresividad, el desprecio o los ataques personales justifican una puntuación baja.
+     Anclas:
+       0,0 = agresivo, despectivo, ataques personales
+       0,5 = neutral, ni cálido ni frío
+       1,0 = cálido, amable, crea una atmósfera positiva
+
+  2. CONSTRUCTIVIDAD: ¿Sus comentarios añaden valor a la conversación?
+     Anclas:
+       0,0 = puramente promocional, egocéntrico o sin contenido
+       0,5 = participación neutral sin valor particular
+       1,0 = aporta hechos, preguntas, matices o perspectiva genuina
+
+  3. PROFUNDIDAD ANALÍTICA: ¿Se involucra con aspectos específicos o permanece superficial?
+     Anclas:
+       0,0 = sin análisis, puramente emocional o promocional
+       0,5 = algunos detalles pero superficial
+       1,0 = análisis preciso, referencias específicas, razonamiento desarrollado
+
+Responde únicamente con JSON:
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "una frase que caracterice este lote"}"""
+
+_CREATOR_CONSOLIDATE_PROMPT = """\
+IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
+
+You have analyzed a YouTube creator's comments across multiple batches.
+Below are the partial assessments from each batch.
+
+Synthesize these into a single final overall judgment.
+Weight all batches equally unless you notice a clear trend of improvement or decline.
+
+Respond with JSON only:
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "one sentence final synthesis"}"""
+
+_CREATOR_CONSOLIDATE_PROMPT_FR = """\
+IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
+
+Vous avez analysé les commentaires d'un créateur YouTube en plusieurs lots.
+Voici les évaluations partielles de chaque lot.
+
+Synthétisez-les en un jugement final global.
+Pondérez tous les lots de manière égale, sauf si vous observez une tendance claire d'amélioration ou de déclin.
+
+Répondez uniquement en JSON :
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "une phrase de synthèse finale"}"""
+
+_CREATOR_CONSOLIDATE_PROMPT_ES = """\
+IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
+
+Has analizado los comentarios de un creador de YouTube en múltiples lotes.
+A continuación se muestran las evaluaciones parciales de cada lote.
+
+Sintetiza estas en un juicio final global.
+Pondera todos los lotes por igual, a menos que observes una clara tendencia de mejora o declive.
+
+Responde únicamente con JSON:
+{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "una frase de síntesis final"}"""
+
+_CREATOR_BATCH_PROMPTS = {
+    "french": _CREATOR_BATCH_PROMPT_FR,
+    "spanish": _CREATOR_BATCH_PROMPT_ES,
+    "english": _CREATOR_BATCH_PROMPT,
+}
+_CREATOR_CONSOLIDATE_PROMPTS = {
+    "french": _CREATOR_CONSOLIDATE_PROMPT_FR,
+    "spanish": _CREATOR_CONSOLIDATE_PROMPT_ES,
+    "english": _CREATOR_CONSOLIDATE_PROMPT,
+}
+
 
 def _score_tier(score: float) -> str:
     if score >= 0.65:
@@ -794,6 +936,344 @@ def score_community_tone(conn, community_id: int,
     log.info(
         f"commenter_scoring: tone-scored {total_scored} commenters "
         f"for community {community_id}"
+    )
+    return total_scored
+
+
+def _localise_creator_prompts(conn, community_id: int, llm) -> tuple[str, str]:
+    """
+    Return (batch_prompt, consolidate_prompt) localised to the community's language.
+    """
+    sample_rows = conn.execute(
+        """SELECT text FROM comments
+           WHERE channel_id IN (
+               SELECT source_id FROM community_sources WHERE community_id = ?
+               UNION
+               SELECT channel_id FROM community_channels WHERE community_id = ?
+           )
+           AND text IS NOT NULL AND LENGTH(text) > 20
+           ORDER BY RANDOM() LIMIT 30""",
+        (community_id, community_id),
+    ).fetchall()
+
+    if not sample_rows:
+        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT
+
+    sample_text = "\n".join(r["text"][:100] for r in sample_rows)
+    try:
+        lang = llm.complete(
+            "You are a language detector. Reply with only the language name in English "
+            "(e.g. 'French', 'English', 'Spanish'). Nothing else.",
+            f"What language are most of these comments written in?\n\n{sample_text}",
+            max_tokens=16,
+        ).strip().strip(".").lower()
+    except Exception as e:
+        log.warning(f"commenter_scoring: creator language detection failed: {e}, using English prompt")
+        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT
+
+    batch = _CREATOR_BATCH_PROMPTS.get(lang, _CREATOR_BATCH_PROMPT)
+    consolidate = _CREATOR_CONSOLIDATE_PROMPTS.get(lang, _CREATOR_CONSOLIDATE_PROMPT)
+    log.info(f"commenter_scoring: creator prompts localised to '{lang}'")
+    return batch, consolidate
+
+
+def _score_creator_detailed(
+    conn, community_id: int,
+    author_channel_id: str, author_name: str,
+    llm, channel_ids: list[str],
+    system_prompt_batch: str, system_prompt_consolidate: str,
+    current_backend: str, current_model: str,
+) -> bool:
+    """
+    Deep-analyze one creator's comments.
+    ≤500 comments: all in batches of 50 → consolidation call.
+    >500 comments: chunks of 100 → convergence detection (delta < 0.05).
+    Returns True if scored successfully.
+    """
+    ph = ",".join("?" * len(channel_ids))
+    comment_rows = conn.execute(
+        f"SELECT text FROM comments "
+        f"WHERE channel_id IN ({ph}) AND author_channel_id = ? "
+        f"AND text IS NOT NULL AND LENGTH(text) > 10 "
+        f"ORDER BY like_count DESC",
+        channel_ids + [author_channel_id],
+    ).fetchall()
+
+    comments = [r["text"] for r in comment_rows]
+    total = len(comments)
+    if total == 0:
+        return False
+
+    log.info(f"commenter_scoring: detailed creator analysis — {author_name} ({total} comments)")
+
+    def _clamp(v):
+        try:
+            return round(min(max(float(v), 0.0), 1.0), 4)
+        except (TypeError, ValueError):
+            return None
+
+    def _single_batch(batch: list[str]) -> dict | None:
+        """Submit one batch of comments, return {pol, con, dep, reason} or None."""
+        comment_block = "\n".join(f"  [{i+1}] {c[:300]}" for i, c in enumerate(batch))
+        user_prompt = f"Creator: {author_name}\n\nComments ({len(batch)}):\n{comment_block}"
+        try:
+            result = llm.complete_json(system_prompt_batch, user_prompt, max_tokens=256)
+            if not isinstance(result, dict):
+                return None
+            pol = _clamp(result.get("politeness"))
+            con = _clamp(result.get("constructiveness"))
+            dep = _clamp(result.get("depth"))
+            if pol is None or con is None or dep is None:
+                return None
+            return {"politeness": pol, "constructiveness": con,
+                    "depth": dep, "reason": result.get("reason", "")}
+        except Exception as e:
+            log.warning(f"commenter_scoring: creator batch failed for {author_name}: {e}")
+            return None
+
+    if total <= 500:
+        BATCH = 50
+        batch_results = []
+        for start in range(0, total, BATCH):
+            r = _single_batch(comments[start: start + BATCH])
+            if r:
+                batch_results.append(r)
+
+        if not batch_results:
+            return False
+
+        if len(batch_results) == 1:
+            final = batch_results[0]
+        else:
+            batches_text = "\n".join(
+                f"Batch {i+1}: politeness={r['politeness']}, "
+                f"constructiveness={r['constructiveness']}, depth={r['depth']}. {r['reason']}"
+                for i, r in enumerate(batch_results)
+            )
+            user_prompt = (
+                f"Creator: {author_name}\nTotal comments analyzed: {total}\n\n"
+                f"Batch assessments:\n{batches_text}"
+            )
+            try:
+                result = llm.complete_json(system_prompt_consolidate, user_prompt, max_tokens=256)
+                if isinstance(result, dict):
+                    pol = _clamp(result.get("politeness"))
+                    con = _clamp(result.get("constructiveness"))
+                    dep = _clamp(result.get("depth"))
+                    if pol is not None and con is not None and dep is not None:
+                        final = {"politeness": pol, "constructiveness": con,
+                                 "depth": dep, "reason": result.get("reason", "")}
+                    else:
+                        raise ValueError("incomplete consolidation result")
+                else:
+                    raise ValueError("non-dict consolidation result")
+            except Exception as e:
+                log.warning(f"commenter_scoring: consolidation fallback to mean for {author_name}: {e}")
+                final = {
+                    "politeness":      round(sum(r["politeness"]      for r in batch_results) / len(batch_results), 4),
+                    "constructiveness": round(sum(r["constructiveness"] for r in batch_results) / len(batch_results), 4),
+                    "depth":           round(sum(r["depth"]            for r in batch_results) / len(batch_results), 4),
+                    "reason":          batch_results[-1]["reason"],
+                }
+    else:
+        # Convergence-based: 100 comments at a time, stop when stable
+        BATCH = 100
+        CONVERGENCE = 0.05
+        running_pol = running_con = running_dep = None
+        running_reason = ""
+        chunks = 0
+
+        for start in range(0, total, BATCH):
+            result = _single_batch(comments[start: start + BATCH])
+            if result is None:
+                continue
+
+            if running_pol is None:
+                running_pol = result["politeness"]
+                running_con = result["constructiveness"]
+                running_dep = result["depth"]
+                running_reason = result["reason"]
+                chunks += 1
+                continue
+
+            prev_pol, prev_con, prev_dep = running_pol, running_con, running_dep
+            n = chunks + 1
+            running_pol = (running_pol * chunks + result["politeness"])      / n
+            running_con = (running_con * chunks + result["constructiveness"]) / n
+            running_dep = (running_dep * chunks + result["depth"])            / n
+            running_reason = result["reason"]
+            chunks += 1
+
+            delta = max(
+                abs(running_pol - prev_pol),
+                abs(running_con - prev_con),
+                abs(running_dep - prev_dep),
+            )
+            log.info(
+                f"commenter_scoring: {author_name} chunk {chunks} "
+                f"({min(start+BATCH, total)}/{total} comments), delta={delta:.4f}"
+            )
+            if delta < CONVERGENCE:
+                log.info(f"commenter_scoring: converged after {chunks} chunks for {author_name}")
+                break
+
+        if running_pol is None:
+            return False
+
+        final = {
+            "politeness":      round(running_pol, 4),
+            "constructiveness": round(running_con, 4),
+            "depth":           round(running_dep, 4),
+            "reason":          running_reason,
+        }
+
+    avg = round((final["politeness"] + final["constructiveness"] + final["depth"]) / 3, 4)
+    conn.execute(
+        "UPDATE commenter_scores "
+        "SET llm_tone_score = ?, "
+        "    llm_politeness_score = ?, "
+        "    llm_constructiveness_score = ?, "
+        "    llm_depth_score = ?, "
+        "    llm_tone_reason = ?, "
+        "    llm_tone_backend = ?, llm_tone_model = ? "
+        "WHERE community_id = ? AND author_channel_id = ?",
+        (avg, final["politeness"], final["constructiveness"], final["depth"],
+         final["reason"], current_backend, current_model, community_id, author_channel_id),
+    )
+    conn.commit()
+    return True
+
+
+def score_community_creators_detailed(conn, community_id: int,
+                                       progress_callback=None) -> int:
+    """
+    Run detailed per-creator tone analysis for all channel owners in the community.
+    Each creator gets an individual deep analysis (all their comments, with convergence
+    for large accounts). Must be called after score_community().
+    Returns the number of creators successfully scored.
+    """
+    settings = get_all_settings(conn)
+    cfg = _settings_to_llm_config(settings)
+    llm = LLMClient(cfg, role="tone")
+    current_backend = llm.backend
+    current_model = llm._model
+
+    system_prompt_batch, system_prompt_consolidate = _localise_creator_prompts(
+        conn, community_id, llm
+    )
+
+    channel_ids = get_community_channel_ids(conn, community_id)
+    if not channel_ids:
+        return 0
+
+    creator_ids = set(channel_ids)
+    ph = ",".join("?" * len(creator_ids))
+    rows = conn.execute(
+        f"SELECT author_channel_id, author_name FROM commenter_scores "
+        f"WHERE community_id = ? AND author_channel_id IN ({ph}) "
+        f"ORDER BY quality_score DESC",
+        (community_id, *creator_ids),
+    ).fetchall()
+
+    if not rows:
+        return 0
+
+    total_scored = 0
+    for i, row in enumerate(rows):
+        if progress_callback:
+            progress_callback(i, len(rows))
+        success = _score_creator_detailed(
+            conn, community_id,
+            row["author_channel_id"], row["author_name"],
+            llm, channel_ids,
+            system_prompt_batch, system_prompt_consolidate,
+            current_backend, current_model,
+        )
+        if success:
+            total_scored += 1
+
+    if total_scored > 0:
+        # Recompute quality_score / tier with the new LLM scores
+        stats = _load_commenter_stats(conn, channel_ids)
+        tone_map = {
+            r["author_channel_id"]: {
+                "llm_tone_score":              r["llm_tone_score"],
+                "llm_politeness_score":        r["llm_politeness_score"],
+                "llm_constructiveness_score":  r["llm_constructiveness_score"],
+                "llm_depth_score":             r["llm_depth_score"],
+                "llm_tone_reason":             r["llm_tone_reason"],
+                "llm_tone_backend":            r["llm_tone_backend"],
+                "llm_tone_model":              r["llm_tone_model"],
+            }
+            for r in conn.execute(
+                "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
+                "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
+                "llm_tone_backend, llm_tone_model "
+                "FROM commenter_scores WHERE community_id = ?",
+                (community_id,),
+            ).fetchall()
+        }
+        for s in stats:
+            t = tone_map.get(s["author_channel_id"], {})
+            if t.get("llm_tone_score") is not None:
+                s["llm_tone_score"]             = t["llm_tone_score"]
+                s["llm_politeness_score"]       = t["llm_politeness_score"]
+                s["llm_constructiveness_score"] = t["llm_constructiveness_score"]
+                s["llm_depth_score"]            = t["llm_depth_score"]
+                s["llm_tone_reason"]            = t["llm_tone_reason"]
+                s["llm_tone_backend"]           = t["llm_tone_backend"]
+                s["llm_tone_model"]             = t["llm_tone_model"]
+
+        enriched = _compute_component_scores(stats)
+        conn.execute("DELETE FROM commenter_scores WHERE community_id = ?", (community_id,))
+        conn.executemany(
+            """INSERT INTO commenter_scores
+                   (community_id, author_channel_id, author_name,
+                    quality_score, tier,
+                    avg_engagement_norm, channel_spread_score, like_ratio_score,
+                    factual_anchor_score, avg_length_score, vocab_richness_score,
+                    llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
+                    llm_tone_reason, llm_tone_backend, llm_tone_model,
+                    reply_penalty, reply_ratio,
+                    comment_count, channel_count, total_likes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    community_id,
+                    r["author_channel_id"],
+                    r["author_name"],
+                    r["quality_score"],
+                    r["tier"],
+                    r["avg_eng_score"],
+                    r["channel_spread_score"],
+                    r["like_ratio_score"],
+                    r["factual_anchor_score"],
+                    r["avg_length_score"],
+                    r["vocab_richness_score"],
+                    r.get("llm_tone_score"),
+                    r.get("llm_politeness_score"),
+                    r.get("llm_constructiveness_score"),
+                    r.get("llm_depth_score"),
+                    r.get("llm_tone_reason"),
+                    r.get("llm_tone_backend"),
+                    r.get("llm_tone_model"),
+                    r["reply_penalty"],
+                    r["reply_ratio"],
+                    r["comment_count"],
+                    r["channel_count"],
+                    r["total_likes"],
+                )
+                for r in enriched
+            ],
+        )
+        conn.commit()
+
+    if progress_callback:
+        progress_callback(len(rows), len(rows))
+
+    log.info(
+        f"commenter_scoring: detailed creator analysis done — "
+        f"{total_scored}/{len(rows)} creators scored for community {community_id}"
     )
     return total_scored
 

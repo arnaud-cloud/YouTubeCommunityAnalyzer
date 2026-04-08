@@ -20,6 +20,12 @@
                 🎭 LLM Tone Score
             </button>
         </form>
+        <form method="post" action="{{ url_for('gossip.tone_score_creators_detailed', community_id=community.id) }}" style="display:inline">
+            <button type="submit" class="btn btn-outline" style="border-color:#7c4dff;color:#9e7bff"
+                    title="Deep analysis of channel owners only: all their comments processed in batches, with convergence detection for large accounts.">
+                🔬 Deep Creator Analysis
+            </button>
+        </form>
     </div>
 </div>
 

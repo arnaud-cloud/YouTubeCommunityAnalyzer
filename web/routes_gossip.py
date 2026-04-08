@@ -853,6 +853,55 @@ def tone_score_commenters(community_id):
     return redirect(url_for("gossip.commenters", community_id=community_id))
 
 
+@bp.route("/<int:community_id>/tone-score-creators-detailed", methods=["POST"])
+def tone_score_creators_detailed(community_id):
+    """Run deep per-creator tone analysis (all comments, convergence for >500)."""
+    import time
+    from core.commenter_scoring import score_community, score_community_creators_detailed
+    db_path = current_app.config["DB_PATH"]
+
+    existing_job = _tone_jobs.get(community_id, {})
+    if existing_job.get("status") == "running":
+        flash("A tone scoring job is already running.", "warning")
+        return redirect(url_for("gossip.commenters", community_id=community_id))
+
+    _tone_jobs[community_id] = {
+        "status": "running", "done": 0, "total": 0,
+        "started_at": time.time(), "error": None,
+        "scope": "creators_detailed",
+    }
+
+    def _run():
+        conn = get_db(db_path)
+        try:
+            existing = conn.execute(
+                "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
+                (community_id,),
+            ).fetchone()[0]
+            if existing == 0:
+                score_community(conn, community_id)
+
+            def _progress(done, total_count):
+                _tone_jobs[community_id]["done"] = done
+                _tone_jobs[community_id]["total"] = total_count
+
+            n = score_community_creators_detailed(
+                conn, community_id, progress_callback=_progress
+            )
+            _tone_jobs[community_id]["status"] = "done"
+            _tone_jobs[community_id]["done"] = n
+            _tone_jobs[community_id]["total"] = n
+        except Exception as e:
+            log.error(f"Detailed creator analysis failed for community {community_id}: {e}", exc_info=True)
+            _tone_jobs[community_id]["status"] = "error"
+            _tone_jobs[community_id]["error"] = str(e)
+        finally:
+            conn.close()
+
+    threading.Thread(target=_run, daemon=True).start()
+    return redirect(url_for("gossip.commenters", community_id=community_id))
+
+
 @bp.route("/<int:community_id>/tone-score-status")
 def tone_score_status(community_id):
     """JSON status for the in-progress tone scoring job."""
