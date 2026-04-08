@@ -66,7 +66,9 @@ Score anchors:
   1.0 = notably courteous even under disagreement, analytical, adds real value
 
 Score each commenter independently. Respond with JSON only — no prose, no markdown fences:
-{"scores": [{"author": "<author_name>", "score": 0.0, "reason": "one sentence"}]}"""
+{"scores": [{"index": 1, "score": 0.0, "reason": "one sentence"}]}
+
+Use the integer index shown before each commenter's name. Do not include the commenter's name in your response."""
 
 
 def _score_tier(score: float) -> str:
@@ -403,17 +405,20 @@ def score_community_tone(conn, community_id: int,
             if len(comments_by_author.get(aid, [])) < COMMENTS_PER_AUTHOR:
                 comments_by_author.setdefault(aid, []).append(cr["text"])
 
-        # Build user prompt
+        # Build user prompt — numbered by index for reliable matching
         sections = []
-        author_name_map = {r["author_channel_id"]: r["author_name"] for r in batch}
+        index_to_aid: dict[int, str] = {}
+        idx = 1
         for r in batch:
             aid = r["author_channel_id"]
-            name = author_name_map[aid] or aid
+            name = r["author_name"] or aid
             comments = comments_by_author.get(aid, [])
             if not comments:
                 continue
             comment_block = "\n".join(f"  - {c[:200]}" for c in comments)
-            sections.append(f"COMMENTER: {name}\nCOMMENTS:\n{comment_block}")
+            sections.append(f"COMMENTER {idx}: {name}\nCOMMENTS:\n{comment_block}")
+            index_to_aid[idx] = aid
+            idx += 1
 
         if not sections:
             continue
@@ -434,14 +439,16 @@ def score_community_tone(conn, community_id: int,
 
         scores = result.get("scores", []) if isinstance(result, dict) else []
 
-        # Match results back by author name
-        name_to_aid = {(r["author_name"] or r["author_channel_id"]): r["author_channel_id"]
-                       for r in batch}
+        # Match results back by index
         for item in scores:
-            author_name = item.get("author", "")
+            raw_index = item.get("index")
             tone_score = item.get("score")
             reason = item.get("reason", "")
-            aid = name_to_aid.get(author_name)
+            try:
+                item_index = int(raw_index)
+            except (TypeError, ValueError):
+                continue
+            aid = index_to_aid.get(item_index)
             if aid is None or tone_score is None:
                 continue
             try:
