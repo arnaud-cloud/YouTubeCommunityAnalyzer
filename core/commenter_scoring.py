@@ -402,7 +402,7 @@ def score_community_tone(conn, community_id: int,
     channel_ids = get_community_channel_ids(conn, community_id)
     ph = ",".join("?" * len(channel_ids))
 
-    BATCH_SIZE = 10
+    BATCH_SIZE = 5
     COMMENTS_PER_AUTHOR = 30
     total_scored = 0
 
