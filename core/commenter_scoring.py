@@ -80,6 +80,60 @@ Required output format (JSON only, no other text):
 
 Use the integer index shown before each commenter's name. One entry per commenter."""
 
+_TONE_SYSTEM_PROMPT_FR = """\
+IMPORTANT : Vous devez répondre uniquement en JSON. Pas de prose, pas d'explications, pas de questions, pas de markdown. Uniquement l'objet JSON.
+
+Vous êtes un évaluateur de qualité de commentaires. Les commentaires peuvent être dans n'importe quelle langue — évaluez-les tels quels et répondez toujours au format JSON ci-dessous.
+
+Pour chaque commentateur numéroté, évaluez leur style de commentaire global sur une échelle de 0,0 à 1,0.
+
+Le score reflète TROIS dimensions également importantes :
+  1. POLITESSE / COURTOISIE : Respectueux envers les créateurs et les autres ? Patient même dans la frustration ?
+  2. CONSTRUCTIVITÉ : Apporte-t-il un fait, une question ou une nuance ? Ou est-ce une louange/plainte vide ?
+  3. PROFONDEUR ANALYTIQUE : S'engage-t-il sur des points précis, ou reste-t-il en surface ?
+
+Ancres de score :
+  0,0 = agressif, grossier, trolleur — OU purement adulateur sans aucune substance
+  0,3 = impoli ou impatient même en faisant valoir un point
+  0,5 = fan poli et neutre — pas nuisible, pas perspicace
+  0,7 = poli et sincèrement constructif
+  1,0 = notamment courtois, analytique, apporte une vraie valeur
+
+Format de sortie requis (JSON uniquement, aucun autre texte) :
+{"scores": [{"index": 1, "score": 0.7, "reason": "une phrase en français"}, ...]}
+
+Utilisez l'index entier affiché avant le nom de chaque commentateur. Une entrée par commentateur."""
+
+_TONE_SYSTEM_PROMPT_ES = """\
+IMPORTANTE: Debes responder únicamente con JSON. Sin prosa, sin explicaciones, sin preguntas, sin markdown. Solo el objeto JSON.
+
+Eres un evaluador de calidad de comentarios. Los comentarios pueden estar en cualquier idioma — evalúalos tal como están y responde siempre en el formato JSON a continuación.
+
+Para cada comentarista numerado, califica su estilo general de comentarios en una escala de 0,0 a 1,0.
+
+La puntuación refleja TRES dimensiones igualmente importantes:
+  1. AMABILIDAD / CORTESÍA: ¿Respetuoso hacia los creadores y los demás? ¿Paciente incluso en la frustración?
+  2. CONSTRUCTIVIDAD: ¿Aporta un hecho, una pregunta o un matiz? ¿O son alabanzas/quejas vacías?
+  3. PROFUNDIDAD ANALÍTICA: ¿Se involucra con aspectos específicos o se mantiene en la superficie?
+
+Anclas de puntuación:
+  0,0 = agresivo, grosero, troll — O puramente adulador sin ninguna sustancia
+  0,3 = maleducado o impaciente incluso cuando hace un punto
+  0,5 = fan neutro y educado — no dañino, no perspicaz
+  0,7 = educado y genuinamente constructivo
+  1,0 = notablemente cortés, analítico, aporta valor real
+
+Formato de salida requerido (solo JSON, sin otro texto):
+{"scores": [{"index": 1, "score": 0.7, "reason": "una frase en español"}, ...]}
+
+Usa el índice entero que aparece antes del nombre de cada comentarista. Una entrada por comentarista."""
+
+_TONE_PROMPTS = {
+    "french": _TONE_SYSTEM_PROMPT_FR,
+    "spanish": _TONE_SYSTEM_PROMPT_ES,
+    "english": _TONE_SYSTEM_PROMPT,
+}
+
 
 def _score_tier(score: float) -> str:
     if score >= 0.65:
@@ -354,10 +408,9 @@ def score_community(conn, community_id: int) -> int:
 def _localise_tone_prompt(conn, community_id: int, llm) -> str:
     """
     Detect the dominant language of the community's comments and return
-    the tone system prompt translated into that language.
-    Falls back to English prompt on any error.
+    the pre-translated tone system prompt for that language.
+    Supported: English, French, Spanish. Falls back to English for others.
     """
-    # Sample 30 comments for language detection
     sample_rows = conn.execute(
         """SELECT text FROM comments
            WHERE channel_id IN (
@@ -378,31 +431,17 @@ def _localise_tone_prompt(conn, community_id: int, llm) -> str:
     try:
         lang = llm.complete(
             "You are a language detector. Reply with only the language name in English "
-            "(e.g. 'French', 'English', 'Spanish', 'German'). Nothing else.",
+            "(e.g. 'French', 'English', 'Spanish'). Nothing else.",
             f"What language are most of these comments written in?\n\n{sample_text}",
             max_tokens=16,
-        ).strip().strip(".")
+        ).strip().strip(".").lower()
     except Exception as e:
-        log.warning(f"commenter_scoring: language detection failed: {e}")
+        log.warning(f"commenter_scoring: language detection failed: {e}, using English prompt")
         return _TONE_SYSTEM_PROMPT
 
-    if lang.lower() in ("english", "en"):
-        log.info("commenter_scoring: community language detected as English, using default prompt")
-        return _TONE_SYSTEM_PROMPT
-
-    log.info(f"commenter_scoring: community language detected as '{lang}', translating prompt")
-    try:
-        translated = llm.complete(
-            "You are a professional translator. Translate the following text accurately into "
-            f"{lang}, preserving all formatting, structure, capitalisation, and JSON examples exactly.",
-            _TONE_SYSTEM_PROMPT,
-            max_tokens=1024,
-        )
-        log.info(f"commenter_scoring: prompt translated to {lang} ({len(translated)} chars)")
-        return translated
-    except Exception as e:
-        log.warning(f"commenter_scoring: prompt translation failed: {e}, falling back to English")
-        return _TONE_SYSTEM_PROMPT
+    prompt = _TONE_PROMPTS.get(lang, _TONE_SYSTEM_PROMPT)
+    log.info(f"commenter_scoring: detected language '{lang}', using {'localised' if lang in _TONE_PROMPTS else 'English fallback'} prompt")
+    return prompt
 
 
 def score_community_tone(conn, community_id: int,
