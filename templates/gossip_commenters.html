@@ -233,7 +233,7 @@
           <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
           {% if c.llm_defensiveness_score is not none %}
           <span style="color:var(--border)">·</span>
-          {% set def_color = '#e74c3c' if c.llm_defensiveness_score >= 0.6 else ('#f39c12' if c.llm_defensiveness_score >= 0.3 else '#2ecc71') %}
+          {% set def_color = '#2ecc71' if c.llm_defensiveness_score < 0.3 else ('#f39c12' if c.llm_defensiveness_score < 0.6 else '#e74c3c') %}
           <span style="color:{{ def_color }}" title="Defensiveness: {{ c.llm_defensiveness_reason or 'no detail' }}">D:{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</span>
           {% endif %}
         </div>
