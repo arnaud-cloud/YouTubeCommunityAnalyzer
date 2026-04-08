@@ -1392,7 +1392,7 @@ def score_community_creators_detailed(conn, community_id: int,
     """
     settings = get_all_settings(conn)
     cfg = _settings_to_llm_config(settings)
-    llm = LLMClient(cfg, role="tone")
+    llm = LLMClient(cfg, role="creator")
     current_backend = llm.backend
     current_model = llm._model
 

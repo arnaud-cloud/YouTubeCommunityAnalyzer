@@ -139,6 +139,28 @@
     </div>
 
     <div class="settings-section">
+        <h2>LLM — Deep Creator Analysis (defensiveness &amp; bragging)</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="llm_creator_backend">Backend</label>
+                <select id="llm_creator_backend" name="llm_creator_backend">
+                    <option value="ollama" {% if settings.llm_creator_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
+                    <option value="anthropic" {% if settings.llm_creator_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="llm_creator_anthropic_model">Anthropic Model</label>
+                <input type="text" id="llm_creator_anthropic_model" name="llm_creator_anthropic_model" value="{{ settings.llm_creator_anthropic_model }}">
+                <small>Haiku recommended — nuanced per-creator analysis with convergence detection.</small>
+            </div>
+            <div class="form-group">
+                <label for="llm_creator_ollama_model">Ollama Model</label>
+                <input type="text" id="llm_creator_ollama_model" name="llm_creator_ollama_model" value="{{ settings.llm_creator_ollama_model }}">
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-section">
         <h2>Reddit API</h2>
         <div class="form-row">
             <div class="form-group">
