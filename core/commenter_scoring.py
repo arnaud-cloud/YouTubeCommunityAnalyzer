@@ -346,7 +346,7 @@ RULES:
 - Answering a direct question about oneself is NOT bragging. Correcting misinformation is NOT defensiveness.
 
 Respond with JSON only:
-{"defensiveness": 0.0, "instances": 0, "reason": "cite specific evidence (defensiveness and/or bragging), or state that none was found"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "max one sentence — cite comment numbers as evidence (e.g. '[12] dismissive reply'), or state none found"}"""
 
 _DEFENSIVENESS_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
@@ -386,7 +386,7 @@ RÈGLES :
 - Répondre à une question directe sur soi n'est PAS de la vantardise. Corriger une erreur n'est PAS de la défensivité.
 
 Répondez uniquement en JSON :
-{"defensiveness": 0.0, "instances": 0, "reason": "citez des preuves concrètes (défensivité et/ou vantardise), ou indiquez qu'aucune n'a été trouvée"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "une phrase max — citez les numéros de commentaires comme preuves (ex. '[12] réponse dismissive'), ou indiquez qu'aucune n'a été trouvée"}"""
 
 _DEFENSIVENESS_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
@@ -426,7 +426,7 @@ REGLAS:
 - Responder una pregunta directa sobre uno mismo NO es fanfarronería. Corregir información errónea NO es defensividad.
 
 Responde únicamente con JSON:
-{"defensiveness": 0.0, "instances": 0, "reason": "cita evidencia específica (defensividad y/o fanfarronería), o indica que no se encontró ninguna"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "máximo una frase — cita números de comentarios como evidencia (ej. '[12] respuesta desestimadora'), o indica que no se encontró ninguna"}"""
 
 _DEFENSIVENESS_PROMPTS = {
     "french": _DEFENSIVENESS_PROMPT_FR,
@@ -1350,7 +1350,7 @@ def _assess_creator_defensiveness(
     user_prompt = f"Creator: {author_name}\n\nComments/replies ({len(comments)}):\n{comment_block}"
 
     try:
-        result = llm.complete_json(system_prompt, user_prompt, max_tokens=256)
+        result = llm.complete_json(system_prompt, user_prompt, max_tokens=512)
         if not isinstance(result, dict):
             log.warning(f"commenter_scoring: defensiveness — non-dict response for {author_name}")
             return False
