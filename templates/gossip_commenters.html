@@ -160,6 +160,17 @@
     <input type="hidden" name="tier" value="{{ tier_filter }}">
     {% endif %}
   </form>
+
+  {# ── Percentile color toggle (client-side) ───────────────────── #}
+  <div style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
+    <span style="font-size:.82rem;color:var(--muted)">Color:</span>
+    <div style="display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden">
+      <button id="cm-abs"  onclick="setColorMode('abs')" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff"       title="Absolute thresholds: ≥65% green, ≥35% orange, else red">Abs</button>
+      <button id="cm-3"    onclick="setColorMode('3')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="Top ⅓ / middle ⅓ / bottom ⅓ of this page">3 bands</button>
+      <button id="cm-5"    onclick="setColorMode('5')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="5 equal percentile bands across this page">5 bands</button>
+    </div>
+  </div>
+
   <span style="font-size:.85rem;color:var(--muted);margin-left:auto">{{ total }} commenter{{ 's' if total != 1 }}</span>
 </div>
 
@@ -218,38 +229,109 @@
       <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
         {{ ((c.reply_ratio or 0) * 100) | int }}%
       </td>
-      {# Algorithmic metrics — all color-coded green ≥65%, orange ≥35%, red <35% #}
+      {# Metric cells — data-col + data-val enable client-side percentile coloring #}
       {% set eng = c.avg_engagement_norm or 0 %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if eng >= 0.65 else ('#f39c12' if eng >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(eng * 100) }}%</td>
+      <td class="mc" data-col="eng" data-val="{{ eng }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(eng * 100) }}%</td>
       {% set sprd = c.channel_spread_score or 0 %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if sprd >= 0.65 else ('#f39c12' if sprd >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(sprd * 100) }}%</td>
+      <td class="mc" data-col="sprd" data-val="{{ sprd }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(sprd * 100) }}%</td>
       {% set lrat = c.like_ratio_score or 0 %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if lrat >= 0.65 else ('#f39c12' if lrat >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(lrat * 100) }}%</td>
+      <td class="mc" data-col="lrat" data-val="{{ lrat }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(lrat * 100) }}%</td>
       {% set fact = c.factual_anchor_score or 0 %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if fact >= 0.65 else ('#f39c12' if fact >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(fact * 100) }}%</td>
-      {# Vcb — color-coded #}
+      <td class="mc" data-col="fact" data-val="{{ fact }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(fact * 100) }}%</td>
       {% set v_raw = c.vocab_richness_score or 0 %}
-      {% set v_color = '#2ecc71' if v_raw >= 0.65 else ('#f39c12' if v_raw >= 0.35 else '#e74c3c') %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ v_color }};font-weight:500">{{ "%.0f"|format(v_raw * 100) }}%</td>
-      {# Sub — LLM substance, color-coded, reason in tooltip #}
+      <td class="mc" data-col="vcb" data-val="{{ v_raw }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(v_raw * 100) }}%</td>
       {% if c.llm_tone_score is not none %}
-      {% set t_color = '#2ecc71' if c.llm_tone_score >= 0.65 else ('#f39c12' if c.llm_tone_score >= 0.35 else '#e74c3c') %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ t_color }};font-weight:500" title="{{ c.llm_tone_reason or '' }}">{{ "%.0f"|format(c.llm_tone_score * 100) }}%</td>
+      <td class="mc" data-col="sub" data-val="{{ c.llm_tone_score }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem" title="{{ c.llm_tone_reason or '' }}">{{ "%.0f"|format(c.llm_tone_score * 100) }}%</td>
       {% else %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+      <td class="mc" data-col="sub" data-val="" style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
       {% endif %}
-      {# Def — LLM defensiveness, color-coded (inverted), reason in tooltip #}
       {% if c.llm_defensiveness_score is not none %}
-      {% set def_color = '#2ecc71' if c.llm_defensiveness_score < 0.3 else ('#f39c12' if c.llm_defensiveness_score < 0.6 else '#e74c3c') %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ def_color }};font-weight:500" title="{{ c.llm_defensiveness_reason or '' }}">{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</td>
+      <td class="mc" data-col="def" data-val="{{ c.llm_defensiveness_score }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem" title="{{ c.llm_defensiveness_reason or '' }}">{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</td>
       {% else %}
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+      <td class="mc" data-col="def" data-val="" style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
       {% endif %}
     </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+
+<script>
+(function () {
+  // Cols that are inverted (low = good = green)
+  const INV = new Set(['def']);
+
+  // Color palettes: index 0 = worst, last = best
+  const C3 = ['#e74c3c', '#f39c12', '#2ecc71'];
+  const C5 = ['#e74c3c', '#e67e22', '#8899aa', '#a8e6cf', '#2ecc71'];
+
+  function absColor(col, val) {
+    if (col === 'def') {
+      return val < 0.3 ? '#2ecc71' : val < 0.6 ? '#f39c12' : '#e74c3c';
+    }
+    return val >= 0.65 ? '#2ecc71' : val >= 0.35 ? '#f39c12' : '#e74c3c';
+  }
+
+  function percentileRank(sortedVals, v) {
+    // fraction of values strictly below v
+    let lo = 0, hi = sortedVals.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (sortedVals[m] < v) lo = m + 1; else hi = m; }
+    return lo / sortedVals.length;
+  }
+
+  function bandColor(palette, pct) {
+    const i = Math.min(Math.floor(pct * palette.length), palette.length - 1);
+    return palette[i];
+  }
+
+  window.setColorMode = function (mode) {
+    // Update button styles
+    ['abs', '3', '5'].forEach(m => {
+      const btn = document.getElementById('cm-' + m);
+      if (btn) { btn.style.background = m === mode ? 'var(--accent)' : 'var(--surface)'; btn.style.color = m === mode ? '#fff' : 'var(--muted)'; }
+    });
+
+    const cells = Array.from(document.querySelectorAll('td.mc[data-col]'));
+
+    if (mode === 'abs') {
+      cells.forEach(td => {
+        const v = td.dataset.val;
+        if (v === '' || v === undefined) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
+        td.style.color = absColor(td.dataset.col, parseFloat(v));
+        td.style.fontWeight = '500';
+      });
+      return;
+    }
+
+    // Group by column, build sorted value arrays (nulls excluded)
+    const byCol = {};
+    cells.forEach(td => {
+      const col = td.dataset.col;
+      const v = td.dataset.val;
+      if (v === '' || v === undefined) return;
+      (byCol[col] = byCol[col] || []).push(parseFloat(v));
+    });
+    Object.values(byCol).forEach(a => a.sort((x, y) => x - y));
+
+    const palette = mode === '3' ? C3 : C5;
+
+    cells.forEach(td => {
+      const v = td.dataset.val;
+      if (v === '' || v === undefined) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
+      const col = td.dataset.col;
+      const sorted = byCol[col] || [];
+      if (sorted.length === 0) return;
+      let pct = percentileRank(sorted, parseFloat(v));
+      if (INV.has(col)) pct = 1 - pct;
+      td.style.color = bandColor(palette, pct);
+      td.style.fontWeight = '500';
+    });
+  };
+
+  // Apply absolute coloring on load
+  setColorMode('abs');
+})();
+</script>
 
 {# ── Pagination ─────────────────────────────────────────────────────────── #}
 {% if total_pages > 1 %}
