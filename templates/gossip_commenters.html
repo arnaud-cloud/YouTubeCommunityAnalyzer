@@ -146,11 +146,8 @@
         ('llm_defensiveness_score','Defensiveness (D)'),
         ('avg_engagement_norm',    'Engagement (E)'),
         ('like_ratio_score',       'Like Ratio (L)'),
-        ('factual_anchor_score',   'Factual (F)'),
-        ('channel_count',          'Channels'),
         ('comment_count',          'Comments'),
         ('total_likes',            'Total Likes'),
-        ('reply_ratio',            'Reply %'),
       ] %}
       <option value="{{ col }}|desc" {% if sort_by == col and sort_dir == 'desc' %}selected{% endif %}>{{ label }} ↓</option>
       <option value="{{ col }}|asc"  {% if sort_by == col and sort_dir == 'asc'  %}selected{% endif %}>{{ label }} ↑</option>
@@ -189,10 +186,8 @@
       <th style="padding:.4rem .5rem;min-width:110px">Score</th>
       <th style="padding:.4rem .4rem;text-align:right">Cmts</th>
       <th style="padding:.4rem .4rem;text-align:right">Likes</th>
-      <th style="padding:.4rem .4rem;text-align:right">Rep%</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Engagement — normalized engagement (likes/views) across videos this commenter posted on">Eng</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Like Ratio — percentile rank of average likes per comment within this community">LRat</th>
-      <th style="padding:.4rem .4rem;text-align:right" title="Factual Anchors — share of comments containing numbers, specific names, or verifiable references">Fact</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Vocabulary Richness — type-token ratio percentile: how varied their word choice is. High = diverse/analytical. Low = repetitive/sycophantic.">Vcb</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Substance (LLM) — AI-assessed constructiveness + analytical depth. 0 = pure sycophancy, 1 = highly analytical.">Sub</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Defensiveness &amp; Bragging (LLM) — detects defensive reactions to criticism and unprompted self-promotion. Lower is better.">Def</th>
@@ -226,16 +221,11 @@
       </td>
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.comment_count }}</td>
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.total_likes }}</td>
-      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
-        {{ ((c.reply_ratio or 0) * 100) | int }}%
-      </td>
       {# Metric cells — data-col + data-val enable client-side percentile coloring #}
       {% set eng = c.avg_engagement_norm or 0 %}
       <td class="mc" data-col="eng" data-val="{{ eng }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(eng * 100) }}%</td>
       {% set lrat = c.like_ratio_score or 0 %}
       <td class="mc" data-col="lrat" data-val="{{ lrat }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(lrat * 100) }}%</td>
-      {% set fact = c.factual_anchor_score or 0 %}
-      <td class="mc" data-col="fact" data-val="{{ fact }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(fact * 100) }}%</td>
       {% set v_raw = c.vocab_richness_score or 0 %}
       <td class="mc" data-col="vcb" data-val="{{ v_raw }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(v_raw * 100) }}%</td>
       {% if c.llm_tone_score is not none %}

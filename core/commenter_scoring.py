@@ -7,18 +7,18 @@ Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 
 Scoring formula:
     content_score (with llm_tone_score):
-        eng * 0.25 + llm_tone * 0.20 + factual * 0.20 + length * 0.20 + like_ratio * 0.10 + vocab * 0.05
+        llm_tone * 0.35 + length * 0.30 + like_ratio * 0.20 + vocab * 0.15
 
     content_score (algorithmic only):
-        eng * 0.25 + vocab * 0.25 + factual * 0.20 + length * 0.20 + like_ratio * 0.10
+        vocab * 0.40 + length * 0.35 + like_ratio * 0.25
 
     When llm_defensiveness_score is available (creators):
-        raw = content_score * 0.50 + (1 - defensiveness) * 0.50
+        quality_score = content_score * 0.50 + (1 - defensiveness) * 0.50
 
     Otherwise:
-        raw = content_score
+        quality_score = content_score
 
-    quality_score = raw * (1 - reply_penalty)
+    Engagement (eng) is displayed in the table but not included in the score.
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 """
@@ -34,16 +34,6 @@ from .db import get_community_channel_ids, get_all_settings
 from .llm_client import LLMClient, _settings_to_llm_config
 
 log = logging.getLogger(__name__)
-
-# Regex for factual anchor detection: URLs and date-like patterns
-_FACTUAL_RE = re.compile(
-    r"https?://\S+"
-    r"|"
-    r"\b\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\b"
-    r"|"
-    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{4}\b",
-    re.IGNORECASE,
-)
 
 # Regex for vocabulary richness: 3+ char words, handles French accents
 _WORD_RE = re.compile(r"[a-zA-ZÀ-ÿ]{3,}")
@@ -394,7 +384,7 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
     if not stats:
         return stats
 
-    # Text pass: factual anchors + vocabulary richness
+    # Text pass: vocabulary richness
     author_ids = list({s["author_channel_id"] for s in stats})
     aid_ph = ",".join("?" * len(author_ids))
     text_rows = conn.execute(
@@ -403,28 +393,15 @@ def _load_commenter_stats(conn, channel_ids: list[str]) -> list[dict]:
         channel_ids + author_ids,
     ).fetchall()
 
-    anchor_counts: dict[str, list[int]] = {}
     vocab_data: dict[str, list[float]] = {}
     for r in text_rows:
         aid = r["author_channel_id"]
-        text = r["text"] or ""
-
-        # Factual anchors
-        has_anchor = 1 if _FACTUAL_RE.search(text) else 0
-        if aid not in anchor_counts:
-            anchor_counts[aid] = [0, 0]
-        anchor_counts[aid][0] += has_anchor
-        anchor_counts[aid][1] += 1
-
-        # Vocabulary richness
-        ttr = _vocab_ttr(text)
+        ttr = _vocab_ttr(r["text"] or "")
         if ttr is not None:
             vocab_data.setdefault(aid, []).append(ttr)
 
     for s in stats:
         aid = s["author_channel_id"]
-        ac = anchor_counts.get(aid, [0, 1])
-        s["factual_ratio"] = ac[0] / max(ac[1], 1)
         ttrs = vocab_data.get(aid, [])
         s["vocab_richness"] = sum(ttrs) / len(ttrs) if ttrs else 0.0
 
@@ -457,10 +434,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         rank = bisect.bisect_left(like_per_comment_vals, lpc)
         like_ratio = rank / (n - 1) if n > 1 else 0.5
 
-        # 4. Factual anchor ratio (already 0-1)
-        factual = min(s.get("factual_ratio", 0.0), 1.0)
-
-        # 5. Comment length score: trapezoid (50=0, 50-300=1, >300 diminishes)
+        # 4. Comment length score: trapezoid (50=0, 50-300=1, >300 diminishes)
         avg_len = s["avg_length"] or 0.0
         if avg_len < 50:
             length_score = avg_len / 50.0
@@ -474,27 +448,20 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         vrank = bisect.bisect_left(vocab_vals, vr)
         vocab_score = vrank / (n - 1) if n > 1 else 0.5
 
-        # 7. Reply penalty (external channels only)
-        reply_penalty = min(s["reply_ratio"] * 0.5, 0.3)
-
-        # 8. Content score (0-1) — signals of comment quality
+        # 7. Content score (0-1) — engagement displayed but not scored
         llm_tone = s.get("llm_tone_score")
         if llm_tone is not None:
             content = (
-                eng_score         * 0.25
-                + float(llm_tone) * 0.20
-                + vocab_score     * 0.05
-                + like_ratio      * 0.10
-                + factual         * 0.20
-                + length_score    * 0.20
+                float(llm_tone) * 0.35
+                + length_score  * 0.30
+                + like_ratio    * 0.20
+                + vocab_score   * 0.15
             )
         else:
             content = (
-                eng_score     * 0.25
-                + vocab_score * 0.25
-                + like_ratio  * 0.10
-                + factual     * 0.20
-                + length_score* 0.20
+                vocab_score  * 0.40
+                + length_score * 0.35
+                + like_ratio   * 0.25
             )
 
         # 9. Defensiveness (creators only; NULL = not yet assessed)
@@ -507,9 +474,7 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         else:
             raw = content
 
-        quality_score = round(
-            min(max(raw * (1.0 - reply_penalty), 0.0), 1.0), 4
-        )
+        quality_score = round(min(max(raw, 0.0), 1.0), 4)
 
         enriched.append({
             **s,
@@ -518,10 +483,10 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
             "avg_eng_score":        round(eng_score, 4),
             "channel_spread_score": 0.0,
             "like_ratio_score":     round(like_ratio, 4),
-            "factual_anchor_score": round(factual, 4),
+            "factual_anchor_score": 0.0,
             "avg_length_score":     round(length_score, 4),
             "vocab_richness_score": round(vocab_score, 4),
-            "reply_penalty":        round(reply_penalty, 4),
+            "reply_penalty":        0.0,
             "reply_ratio":          round(s["reply_ratio"], 4),
         })
 
