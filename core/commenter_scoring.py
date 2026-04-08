@@ -61,32 +61,17 @@ IMPORTANT: You must respond with JSON only. No prose, no explanations, no questi
 
 You are a comment quality evaluator. Comments may be in any language — evaluate them as-is and always respond in the JSON format below.
 
-For each numbered commenter, rate their style on a 0.0–1.0 scale across THREE independent dimensions:
+For each numbered commenter, rate their overall SUBSTANCE on a single 0.0–1.0 scale.
+Substance combines what they contribute (facts, questions, nuance) AND how deeply they engage (specific references, developed reasoning vs. surface reactions).
 
-  1. POLITENESS / COURTESY: Are they respectful toward creators and others?
-     Humor, lightness, and good-natured irony are signs of politeness, not flaws.
-     Only aggression, contempt, or personal attacks justify a low score.
-     Anchors:
-       0.0 = aggressive, contemptuous, personal attacks
-       0.3 = hostile or condescending tone
-       0.5 = neutral, neither warm nor cold
-       0.7 = respectful and pleasant, humor or lightness welcome
-       1.0 = warm, kind, creates a positive atmosphere
-
-  2. CONSTRUCTIVENESS: Does it add a fact, question, or nuanced point? Or is it empty praise/complaint?
-     Anchors:
-       0.0 = purely sycophantic or complaining, no substance
-       0.5 = neutral fan engagement, not particularly useful
-       1.0 = adds facts, questions, nuance, or original perspective
-
-  3. ANALYTICAL DEPTH: Engages with specifics, or stays at surface level?
-     Anchors:
-       0.0 = no analysis, purely emotional reaction
-       0.5 = some detail but stays superficial
-       1.0 = precise analysis, specific references, developed reasoning
+  0.0 = purely emotional, sycophantic, or complaining — zero substance
+  0.3 = minimal: a very short or generic reaction with nothing added
+  0.5 = some engagement but stays superficial, or neutral fan interaction
+  0.7 = adds genuine value: a fact, question, or developed point
+  1.0 = highly analytical: precise references, original perspective, developed reasoning
 
 Required output format (JSON only, no other text):
-{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "one sentence in English"}, ...]}
+{"scores": [{"index": 1, "constructiveness": 0.7, "reason": "one sentence in English"}, ...]}
 
 Use the integer index shown before each commenter's name. One entry per commenter."""
 
@@ -97,30 +82,17 @@ Vous êtes un évaluateur de qualité de commentaires. Les commentaires peuvent 
 
 Pour chaque commentateur numéroté, évaluez leur style de commentaire global sur une échelle de 0,0 à 1,0 selon TROIS dimensions indépendantes :
 
-  1. POLITESSE / COURTOISIE : Est-il respectueux envers les créateurs et les autres ?
-     L'humour, la légèreté et l'ironie bienveillante sont des signes de politesse, pas des défauts.
-     Seuls l'agressivité, le mépris ou les attaques personnelles justifient une note basse.
-     Ancres :
-       0,0 = agressif, méprisant, attaques personnelles
-       0,3 = ton hostile ou condescendant
-       0,5 = neutre, ni chaleureux ni froid
-       0,7 = respectueux et agréable, humour ou légèreté bienvenue
-       1,0 = chaleureux, bienveillant, crée une atmosphère positive
+Pour chaque commentateur numéroté, évaluez leur SUBSTANCE globale sur une échelle unique de 0,0 à 1,0.
+La substance combine ce qu'ils apportent (faits, questions, nuances) ET la profondeur de leur engagement (références précises, raisonnement développé vs. réactions de surface).
 
-  2. CONSTRUCTIVITÉ : Apporte-t-il un fait, une question ou une nuance ? Ou est-ce une louange/plainte vide ?
-     Ancres :
-       0,0 = purement adulateur ou plaintif, aucune substance
-       0,5 = engagement neutre de fan, pas particulièrement utile
-       1,0 = apporte des faits, questions, nuances ou points de vue originaux
-
-  3. PROFONDEUR ANALYTIQUE : S'engage-t-il sur des points précis, ou reste-t-il en surface ?
-     Ancres :
-       0,0 = aucune analyse, réaction purement émotionnelle
-       0,5 = quelques détails mais reste superficiel
-       1,0 = analyse précise, références spécifiques, raisonnement développé
+  0,0 = purement émotionnel, adulateur ou plaintif — aucune substance
+  0,3 = minimal : réaction très courte ou générique, rien d'ajouté
+  0,5 = quelque engagement mais superficiel, ou interaction neutre de fan
+  0,7 = apporte une vraie valeur : un fait, une question ou un point développé
+  1,0 = très analytique : références précises, perspective originale, raisonnement développé
 
 Format de sortie requis (JSON uniquement, aucun autre texte) :
-{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "une phrase en français"}, ...]}
+{"scores": [{"index": 1, "constructiveness": 0.7, "reason": "une phrase en français"}, ...]}
 
 Utilisez l'index entier affiché avant le nom de chaque commentateur. Une entrée par commentateur."""
 
@@ -131,30 +103,17 @@ Eres un evaluador de calidad de comentarios. Los comentarios pueden estar en cua
 
 Para cada comentarista numerado, califica su estilo en una escala de 0,0 a 1,0 según TRES dimensiones independientes:
 
-  1. AMABILIDAD / CORTESÍA: ¿Es respetuoso hacia los creadores y los demás?
-     El humor, la ligereza y la ironía benévola son signos de cortesía, no defectos.
-     Solo la agresividad, el desprecio o los ataques personales justifican una puntuación baja.
-     Anclas:
-       0,0 = agresivo, despectivo, ataques personales
-       0,3 = tono hostil o condescendiente
-       0,5 = neutral, ni cálido ni frío
-       0,7 = respetuoso y agradable, humor o ligereza bienvenidos
-       1,0 = cálido, amable, crea una atmósfera positiva
+Para cada comentarista numerado, califica su SUSTANCIA global en una escala única de 0,0 a 1,0.
+La sustancia combina lo que aportan (hechos, preguntas, matices) Y la profundidad de su participación (referencias específicas, razonamiento desarrollado vs. reacciones superficiales).
 
-  2. CONSTRUCTIVIDAD: ¿Aporta un hecho, una pregunta o un matiz? ¿O son alabanzas/quejas vacías?
-     Anclas:
-       0,0 = puramente adulador o quejoso, sin sustancia
-       0,5 = participación neutra de fan, no especialmente útil
-       1,0 = aporta hechos, preguntas, matices o perspectiva original
-
-  3. PROFUNDIDAD ANALÍTICA: ¿Se involucra con aspectos específicos o se mantiene en la superficie?
-     Anclas:
-       0,0 = sin análisis, reacción puramente emocional
-       0,5 = algunos detalles pero superficial
-       1,0 = análisis preciso, referencias específicas, razonamiento desarrollado
+  0,0 = puramente emocional, adulador o quejoso — cero sustancia
+  0,3 = mínimo: reacción muy corta o genérica, sin nada añadido
+  0,5 = alguna participación pero superficial, o interacción neutra de fan
+  0,7 = aporta valor genuino: un hecho, una pregunta o un punto desarrollado
+  1,0 = muy analítico: referencias precisas, perspectiva original, razonamiento desarrollado
 
 Formato de salida requerido (solo JSON, sin otro texto):
-{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "una frase en español"}, ...]}
+{"scores": [{"index": 1, "constructiveness": 0.7, "reason": "una frase en español"}, ...]}
 
 Usa el índice entero que aparece antes del nombre de cada comentarista. Una entrada por comentarista."""
 
@@ -170,130 +129,82 @@ _CREATOR_BATCH_PROMPT = """\
 IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
 
 You are performing an in-depth analysis of a single YouTube creator's commenting behavior.
-You will receive one batch of their comments and rate them on three dimensions.
+Rate their overall SUBSTANCE on a single 0.0–1.0 scale for this batch.
+Substance combines what they contribute (facts, questions, nuance) AND how deeply they engage (specific references, developed reasoning vs. surface reactions).
 
-Rate this creator on a 0.0–1.0 scale for this batch:
-
-  1. POLITENESS / COURTESY: Are they respectful in their interactions?
-     Humor, lightness, and good-natured irony are signs of politeness, not flaws.
-     Only aggression, contempt, or personal attacks justify a low score.
-     Anchors:
-       0.0 = aggressive, contemptuous, personal attacks
-       0.5 = neutral, neither warm nor cold
-       1.0 = warm, kind, creates a positive atmosphere
-
-  2. CONSTRUCTIVENESS: Do their comments add value to the conversation?
-     Anchors:
-       0.0 = purely promotional, self-serving, or content-free
-       0.5 = neutral engagement with no particular value
-       1.0 = adds facts, questions, nuance, or genuine insight
-
-  3. ANALYTICAL DEPTH: Do they engage with specifics or stay at surface level?
-     Anchors:
-       0.0 = no analysis, purely emotional or promotional
-       0.5 = some detail but stays superficial
-       1.0 = precise analysis, specific references, developed reasoning
+  0.0 = no substance — purely promotional, self-serving, or content-free
+  0.3 = minimal engagement, generic or very short, nothing added
+  0.5 = some engagement but stays superficial
+  0.7 = adds genuine value: a fact, question, or developed point
+  1.0 = highly analytical: precise references, original perspective, developed reasoning
 
 Respond with JSON only:
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "one sentence characterizing this batch"}"""
+{"constructiveness": 0.7, "reason": "one sentence characterizing this batch"}"""
 
 _CREATOR_BATCH_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
 
 Vous effectuez une analyse approfondie du comportement de commentaires d'un seul créateur YouTube.
-Vous recevrez un lot de leurs commentaires et les évaluerez sur trois dimensions.
+Évaluez leur SUBSTANCE globale sur une échelle unique de 0,0 à 1,0 pour ce lot.
+La substance combine ce qu'ils apportent (faits, questions, nuances) ET la profondeur de leur engagement (références précises, raisonnement développé vs. réactions de surface).
 
-Évaluez ce créateur sur une échelle de 0,0 à 1,0 pour ce lot :
-
-  1. POLITESSE / COURTOISIE : Est-il respectueux dans ses interactions ?
-     L'humour, la légèreté et l'ironie bienveillante sont des signes de politesse, pas des défauts.
-     Seuls l'agressivité, le mépris ou les attaques personnelles justifient une note basse.
-     Ancres :
-       0,0 = agressif, méprisant, attaques personnelles
-       0,5 = neutre, ni chaleureux ni froid
-       1,0 = chaleureux, bienveillant, crée une atmosphère positive
-
-  2. CONSTRUCTIVITÉ : Ses commentaires apportent-ils de la valeur à la conversation ?
-     Ancres :
-       0,0 = purement promotionnel, égocentrique ou sans contenu
-       0,5 = engagement neutre sans valeur particulière
-       1,0 = apporte des faits, questions, nuances ou une vraie perspicacité
-
-  3. PROFONDEUR ANALYTIQUE : S'engage-t-il sur des points précis ou reste-t-il en surface ?
-     Ancres :
-       0,0 = aucune analyse, purement émotionnel ou promotionnel
-       0,5 = quelques détails mais superficiel
-       1,0 = analyse précise, références spécifiques, raisonnement développé
+  0,0 = aucune substance — purement promotionnel, égocentrique ou sans contenu
+  0,3 = engagement minimal, générique ou très court, rien d'ajouté
+  0,5 = quelque engagement mais superficiel
+  0,7 = apporte une vraie valeur : un fait, une question ou un point développé
+  1,0 = très analytique : références précises, perspective originale, raisonnement développé
 
 Répondez uniquement en JSON :
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "une phrase caractérisant ce lot"}"""
+{"constructiveness": 0.7, "reason": "une phrase caractérisant ce lot"}"""
 
 _CREATOR_BATCH_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
 
 Estás realizando un análisis detallado del comportamiento de comentarios de un único creador de YouTube.
-Recibirás un lote de sus comentarios y los evaluarás en tres dimensiones.
+Califica su SUSTANCIA global en una escala única de 0,0 a 1,0 para este lote.
+La sustancia combina lo que aportan (hechos, preguntas, matices) Y la profundidad de su participación (referencias específicas, razonamiento desarrollado vs. reacciones superficiales).
 
-Evalúa a este creador en una escala de 0,0 a 1,0 para este lote:
-
-  1. AMABILIDAD / CORTESÍA: ¿Es respetuoso en sus interacciones?
-     El humor, la ligereza y la ironía benévola son signos de cortesía, no defectos.
-     Solo la agresividad, el desprecio o los ataques personales justifican una puntuación baja.
-     Anclas:
-       0,0 = agresivo, despectivo, ataques personales
-       0,5 = neutral, ni cálido ni frío
-       1,0 = cálido, amable, crea una atmósfera positiva
-
-  2. CONSTRUCTIVIDAD: ¿Sus comentarios añaden valor a la conversación?
-     Anclas:
-       0,0 = puramente promocional, egocéntrico o sin contenido
-       0,5 = participación neutral sin valor particular
-       1,0 = aporta hechos, preguntas, matices o perspectiva genuina
-
-  3. PROFUNDIDAD ANALÍTICA: ¿Se involucra con aspectos específicos o permanece superficial?
-     Anclas:
-       0,0 = sin análisis, puramente emocional o promocional
-       0,5 = algunos detalles pero superficial
-       1,0 = análisis preciso, referencias específicas, razonamiento desarrollado
+  0,0 = sin sustancia — puramente promocional, egocéntrico o sin contenido
+  0,3 = participación mínima, genérica o muy corta, sin nada añadido
+  0,5 = alguna participación pero superficial
+  0,7 = aporta valor genuino: un hecho, una pregunta o un punto desarrollado
+  1,0 = muy analítico: referencias precisas, perspectiva original, razonamiento desarrollado
 
 Responde únicamente con JSON:
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "una frase que caracterice este lote"}"""
+{"constructiveness": 0.7, "reason": "una frase que caracterice este lote"}"""
 
 _CREATOR_CONSOLIDATE_PROMPT = """\
 IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
 
 You have analyzed a YouTube creator's comments across multiple batches.
-Below are the partial assessments from each batch.
+Below are the partial substance scores from each batch.
 
-Synthesize these into a single final overall judgment.
-Weight all batches equally unless you notice a clear trend of improvement or decline.
+Synthesize into a single final score. Weight all batches equally unless you notice a clear trend.
 
 Respond with JSON only:
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "one sentence final synthesis"}"""
+{"constructiveness": 0.7, "reason": "one sentence final synthesis"}"""
 
 _CREATOR_CONSOLIDATE_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
 
 Vous avez analysé les commentaires d'un créateur YouTube en plusieurs lots.
-Voici les évaluations partielles de chaque lot.
+Voici les scores de substance partiels de chaque lot.
 
-Synthétisez-les en un jugement final global.
-Pondérez tous les lots de manière égale, sauf si vous observez une tendance claire d'amélioration ou de déclin.
+Synthétisez en un score final unique. Pondérez tous les lots de manière égale sauf si vous observez une tendance claire.
 
 Répondez uniquement en JSON :
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "une phrase de synthèse finale"}"""
+{"constructiveness": 0.7, "reason": "une phrase de synthèse finale"}"""
 
 _CREATOR_CONSOLIDATE_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
 
 Has analizado los comentarios de un creador de YouTube en múltiples lotes.
-A continuación se muestran las evaluaciones parciales de cada lote.
+A continuación se muestran las puntuaciones de sustancia parciales de cada lote.
 
-Sintetiza estas en un juicio final global.
-Pondera todos los lotes por igual, a menos que observes una clara tendencia de mejora o declive.
+Sintetiza en una puntuación final única. Pondera todos los lotes por igual salvo tendencia clara.
 
 Responde únicamente con JSON:
-{"politeness": 0.8, "constructiveness": 0.7, "depth": 0.6, "reason": "una frase de síntesis final"}"""
+{"constructiveness": 0.7, "reason": "una frase de síntesis final"}"""
 
 _CREATOR_BATCH_PROMPTS = {
     "french": _CREATOR_BATCH_PROMPT_FR,
@@ -920,30 +831,29 @@ def score_community_tone(conn, community_id: int,
                 except (TypeError, ValueError):
                     return None
 
-            pol  = _clamp(item.get("politeness"))
-            con  = _clamp(item.get("constructiveness"))
-            dep  = _clamp(item.get("depth"))
+            con = _clamp(item.get("constructiveness"))
+            # Fall back to legacy keys if needed
+            if con is None:
+                con = _clamp(item.get("score"))
+            if con is None:
+                dep = _clamp(item.get("depth"))
+                pol = _clamp(item.get("politeness"))
+                parts = [x for x in (pol, dep) if x is not None]
+                con = round(sum(parts) / len(parts), 4) if parts else None
 
-            # Fall back to legacy "score" key if sub-scores missing
-            if pol is None and con is None and dep is None:
-                avg = _clamp(item.get("score"))
-            else:
-                parts = [x for x in (pol, con, dep) if x is not None]
-                avg = round(sum(parts) / len(parts), 4) if parts else None
-
-            if avg is None:
+            if con is None:
                 return False
 
             conn.execute(
                 "UPDATE commenter_scores "
                 "SET llm_tone_score = ?, "
-                "    llm_politeness_score = ?, "
+                "    llm_politeness_score = NULL, "
                 "    llm_constructiveness_score = ?, "
-                "    llm_depth_score = ?, "
+                "    llm_depth_score = NULL, "
                 "    llm_tone_reason = ?, "
                 "    llm_tone_backend = ?, llm_tone_model = ? "
                 "WHERE community_id = ? AND author_channel_id = ?",
-                (avg, pol, con, dep, reason, current_backend, current_model, community_id, aid),
+                (con, con, reason, current_backend, current_model, community_id, aid),
             )
             return True
 
@@ -1171,20 +1081,17 @@ def _score_creator_detailed(
             return None
 
     def _single_batch(batch: list[str]) -> dict | None:
-        """Submit one batch of comments, return {pol, con, dep, reason} or None."""
+        """Submit one batch, return {constructiveness, reason} or None."""
         comment_block = "\n".join(f"  [{i+1}] {c[:300]}" for i, c in enumerate(batch))
         user_prompt = f"Creator: {author_name}\n\nComments ({len(batch)}):\n{comment_block}"
         try:
             result = llm.complete_json(system_prompt_batch, user_prompt, max_tokens=256)
             if not isinstance(result, dict):
                 return None
-            pol = _clamp(result.get("politeness"))
             con = _clamp(result.get("constructiveness"))
-            dep = _clamp(result.get("depth"))
-            if pol is None or con is None or dep is None:
+            if con is None:
                 return None
-            return {"politeness": pol, "constructiveness": con,
-                    "depth": dep, "reason": result.get("reason", "")}
+            return {"constructiveness": con, "reason": result.get("reason", "")}
         except Exception as e:
             log.warning(f"commenter_scoring: creator batch failed for {author_name}: {e}")
             return None
@@ -1204,8 +1111,7 @@ def _score_creator_detailed(
             final = batch_results[0]
         else:
             batches_text = "\n".join(
-                f"Batch {i+1}: politeness={r['politeness']}, "
-                f"constructiveness={r['constructiveness']}, depth={r['depth']}. {r['reason']}"
+                f"Batch {i+1}: substance={r['constructiveness']}. {r['reason']}"
                 for i, r in enumerate(batch_results)
             )
             user_prompt = (
@@ -1215,12 +1121,9 @@ def _score_creator_detailed(
             try:
                 result = llm.complete_json(system_prompt_consolidate, user_prompt, max_tokens=256)
                 if isinstance(result, dict):
-                    pol = _clamp(result.get("politeness"))
                     con = _clamp(result.get("constructiveness"))
-                    dep = _clamp(result.get("depth"))
-                    if pol is not None and con is not None and dep is not None:
-                        final = {"politeness": pol, "constructiveness": con,
-                                 "depth": dep, "reason": result.get("reason", "")}
+                    if con is not None:
+                        final = {"constructiveness": con, "reason": result.get("reason", "")}
                     else:
                         raise ValueError("incomplete consolidation result")
                 else:
@@ -1228,16 +1131,14 @@ def _score_creator_detailed(
             except Exception as e:
                 log.warning(f"commenter_scoring: consolidation fallback to mean for {author_name}: {e}")
                 final = {
-                    "politeness":      round(sum(r["politeness"]      for r in batch_results) / len(batch_results), 4),
                     "constructiveness": round(sum(r["constructiveness"] for r in batch_results) / len(batch_results), 4),
-                    "depth":           round(sum(r["depth"]            for r in batch_results) / len(batch_results), 4),
-                    "reason":          batch_results[-1]["reason"],
+                    "reason": batch_results[-1]["reason"],
                 }
     else:
         # Convergence-based: 100 comments at a time, stop when stable
         BATCH = 100
         CONVERGENCE = 0.05
-        running_pol = running_con = running_dep = None
+        running_con = None
         running_reason = ""
         chunks = 0
 
@@ -1246,27 +1147,18 @@ def _score_creator_detailed(
             if result is None:
                 continue
 
-            if running_pol is None:
-                running_pol = result["politeness"]
+            if running_con is None:
                 running_con = result["constructiveness"]
-                running_dep = result["depth"]
                 running_reason = result["reason"]
                 chunks += 1
                 continue
 
-            prev_pol, prev_con, prev_dep = running_pol, running_con, running_dep
-            n = chunks + 1
-            running_pol = (running_pol * chunks + result["politeness"])      / n
-            running_con = (running_con * chunks + result["constructiveness"]) / n
-            running_dep = (running_dep * chunks + result["depth"])            / n
+            prev_con = running_con
+            running_con = (running_con * chunks + result["constructiveness"]) / (chunks + 1)
             running_reason = result["reason"]
             chunks += 1
 
-            delta = max(
-                abs(running_pol - prev_pol),
-                abs(running_con - prev_con),
-                abs(running_dep - prev_dep),
-            )
+            delta = abs(running_con - prev_con)
             log.info(
                 f"commenter_scoring: {author_name} chunk {chunks} "
                 f"({min(start+BATCH, total)}/{total} comments), delta={delta:.4f}"
@@ -1275,28 +1167,22 @@ def _score_creator_detailed(
                 log.info(f"commenter_scoring: converged after {chunks} chunks for {author_name}")
                 break
 
-        if running_pol is None:
+        if running_con is None:
             return False
 
-        final = {
-            "politeness":      round(running_pol, 4),
-            "constructiveness": round(running_con, 4),
-            "depth":           round(running_dep, 4),
-            "reason":          running_reason,
-        }
+        final = {"constructiveness": round(running_con, 4), "reason": running_reason}
 
-    avg = round((final["politeness"] + final["constructiveness"] + final["depth"]) / 3, 4)
+    con = final["constructiveness"]
     conn.execute(
         "UPDATE commenter_scores "
         "SET llm_tone_score = ?, "
-        "    llm_politeness_score = ?, "
+        "    llm_politeness_score = NULL, "
         "    llm_constructiveness_score = ?, "
-        "    llm_depth_score = ?, "
+        "    llm_depth_score = NULL, "
         "    llm_tone_reason = ?, "
         "    llm_tone_backend = ?, llm_tone_model = ? "
         "WHERE community_id = ? AND author_channel_id = ?",
-        (avg, final["politeness"], final["constructiveness"], final["depth"],
-         final["reason"], current_backend, current_model, community_id, author_channel_id),
+        (con, con, final["reason"], current_backend, current_model, community_id, author_channel_id),
     )
     conn.commit()
     return True

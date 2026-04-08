@@ -638,12 +638,8 @@ function renderToneCard(channelFilter) {
         ['Vocab richness',Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'],
     ];
     if (s.llm_tone_score !== null && s.llm_tone_score !== undefined) {
-        const pol = s.llm_politeness_score || 0;
-        const con = s.llm_constructiveness_score || 0;
-        const dep = s.llm_depth_score || 0;
-        bars.push(['Politeness',       Math.round(pol * 100), toneColor(pol)]);
-        bars.push(['Constructiveness', Math.round(con * 100), toneColor(con)]);
-        bars.push(['Depth',            Math.round(dep * 100), toneColor(dep)]);
+        const con = s.llm_tone_score || 0;
+        bars.push(['Substance (T)', Math.round(con * 100), toneColor(con)]);
     }
 
     const barsHtml = bars.map(([label, val, color]) => `
@@ -674,7 +670,7 @@ function renderToneCard(channelFilter) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem">
             <div>${barsHtml}</div>
             <div style="font-size:.82rem;color:var(--muted)">
-                ${s.llm_tone_reason ? '<div style="font-size:.8rem;font-weight:600;color:#a8e6cf;margin-bottom:.3rem">LLM Assessment</div>' : ''}
+                ${s.llm_tone_reason ? `<div style="font-size:.8rem;font-weight:600;color:#a8e6cf;margin-bottom:.2rem">T — Substance <span style="font-weight:400;color:var(--muted)">(constructiveness + analytical depth)</span></div>` : ''}
                 ${toneReason || '<span style="color:var(--muted)">No LLM tone analysis yet. Run <strong>LLM Tone Score</strong> in the Commenters panel.</span>'}
             </div>
         </div>`;

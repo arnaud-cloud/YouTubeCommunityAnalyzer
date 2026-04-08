@@ -660,10 +660,22 @@ def commenters(community_id):
     page = request.args.get("page", 1, type=int)
     per_page = 50
     tier_filter = request.args.get("tier", "")
-    sort_by = request.args.get("sort", "quality_score")
-    creators_only = request.args.get("creators_only", "") == "1"
-    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes", "reply_ratio", "llm_tone_score", "llm_politeness_score", "llm_constructiveness_score", "llm_depth_score", "llm_defensiveness_score"}:
+    _SORT_COLS = {
+        "quality_score", "channel_count", "comment_count", "total_likes",
+        "reply_ratio", "avg_engagement_norm", "like_ratio_score",
+        "factual_anchor_score", "avg_length_score", "vocab_richness_score",
+        "llm_tone_score", "llm_constructiveness_score", "llm_defensiveness_score",
+    }
+    sortkey = request.args.get("sortkey", "quality_score|desc")
+    if "|" in sortkey:
+        sort_by, sort_dir = sortkey.split("|", 1)
+    else:
+        sort_by, sort_dir = sortkey, "desc"
+    if sort_by not in _SORT_COLS:
         sort_by = "quality_score"
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = "desc"
+    creators_only = request.args.get("creators_only", "") == "1"
 
     # Fetch channel owner IDs for this community
     channel_owner_ids = [
@@ -691,7 +703,7 @@ def commenters(community_id):
 
     rows = conn.execute(
         f"SELECT * FROM commenter_scores WHERE {where} "
-        f"ORDER BY {sort_by} DESC "
+        f"ORDER BY {sort_by} {sort_dir.upper()} NULLS LAST "
         f"LIMIT ? OFFSET ?",
         params + [per_page, (page - 1) * per_page],
     ).fetchall()
@@ -732,6 +744,7 @@ def commenters(community_id):
         total=total,
         total_pages=max(1, math.ceil(total / per_page)),
         sort_by=sort_by,
+        sort_dir=sort_dir,
         tier_filter=tier_filter,
         computed_at=computed_at,
     )

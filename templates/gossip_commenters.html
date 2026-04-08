@@ -137,18 +137,24 @@
       <input type="checkbox" name="creators_only" value="1" {% if creators_only %}checked{% endif %} onchange="this.form.submit()">
       Creators only
     </label>
-    <label style="font-size:.9rem;color:var(--muted)">Sort by:</label>
-    <select name="sort" onchange="this.form.submit()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
-      <option value="quality_score"  {% if sort_by == 'quality_score'  %}selected{% endif %}>Quality Score</option>
-      <option value="channel_count"  {% if sort_by == 'channel_count'  %}selected{% endif %}>Channels</option>
-      <option value="comment_count"  {% if sort_by == 'comment_count'  %}selected{% endif %}>Comments</option>
-      <option value="total_likes"    {% if sort_by == 'total_likes'    %}selected{% endif %}>Total Likes</option>
-      <option value="reply_ratio"              {% if sort_by == 'reply_ratio'              %}selected{% endif %}>Reply %</option>
-      <option value="llm_tone_score"           {% if sort_by == 'llm_tone_score'           %}selected{% endif %}>Tone (avg)</option>
-      <option value="llm_politeness_score"     {% if sort_by == 'llm_politeness_score'     %}selected{% endif %}>Politeness</option>
-      <option value="llm_constructiveness_score" {% if sort_by == 'llm_constructiveness_score' %}selected{% endif %}>Constructiveness</option>
-      <option value="llm_depth_score"          {% if sort_by == 'llm_depth_score'          %}selected{% endif %}>Depth</option>
-      <option value="llm_defensiveness_score"  {% if sort_by == 'llm_defensiveness_score'  %}selected{% endif %}>Defensiveness ↑</option>
+    <label style="font-size:.9rem;color:var(--muted)">Sort:</label>
+    <select name="sortkey" onchange="this.form.submit()" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.3rem .5rem;font-size:.85rem">
+      {% for col, label in [
+        ('quality_score',          'Quality Score'),
+        ('llm_tone_score',         'Substance (T)'),
+        ('vocab_richness_score',   'Vocab (V)'),
+        ('llm_defensiveness_score','Defensiveness (D)'),
+        ('avg_engagement_norm',    'Engagement (E)'),
+        ('like_ratio_score',       'Like Ratio (L)'),
+        ('factual_anchor_score',   'Factual (F)'),
+        ('channel_count',          'Channels'),
+        ('comment_count',          'Comments'),
+        ('total_likes',            'Total Likes'),
+        ('reply_ratio',            'Reply %'),
+      ] %}
+      <option value="{{ col }}|desc" {% if sort_by == col and sort_dir == 'desc' %}selected{% endif %}>{{ label }} ↓</option>
+      <option value="{{ col }}|asc"  {% if sort_by == col and sort_dir == 'asc'  %}selected{% endif %}>{{ label }} ↑</option>
+      {% endfor %}
     </select>
     {% if tier_filter %}
     <input type="hidden" name="tier" value="{{ tier_filter }}">
@@ -163,15 +169,15 @@
 <table style="width:100%;border-collapse:collapse;font-size:.9rem">
   <thead>
     <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.82rem;text-transform:uppercase;letter-spacing:.05em">
-      <th style="padding:.5rem .75rem;width:2.5rem">#</th>
-      <th style="padding:.5rem .75rem">Name</th>
-      <th style="padding:.5rem .75rem;width:4rem;text-align:center">Tier</th>
-      <th style="padding:.5rem .75rem;min-width:140px">Score</th>
-      <th style="padding:.5rem .75rem;text-align:right">Channels</th>
-      <th style="padding:.5rem .75rem;text-align:right">Comments</th>
-      <th style="padding:.5rem .75rem;text-align:right">Likes</th>
-      <th style="padding:.5rem .75rem;text-align:right">Reply %</th>
-      <th style="padding:.5rem .75rem;min-width:200px;color:var(--muted)">Breakdown</th>
+      <th style="padding:.4rem .5rem;width:2rem">#</th>
+      <th style="padding:.4rem .5rem">Name</th>
+      <th style="padding:.4rem .5rem;width:3.5rem;text-align:center">Tier</th>
+      <th style="padding:.4rem .5rem;min-width:120px">Score</th>
+      <th style="padding:.4rem .5rem;text-align:right">Ch.</th>
+      <th style="padding:.4rem .5rem;text-align:right">Cmts</th>
+      <th style="padding:.4rem .5rem;text-align:right">Likes</th>
+      <th style="padding:.4rem .5rem;text-align:right">Rep.%</th>
+      <th style="padding:.4rem .5rem;color:var(--muted);font-size:.75rem">E · C · L · F · V · T · D</th>
     </tr>
   </thead>
   <tbody>
@@ -180,61 +186,61 @@
     {% set tier_color = {'A': '#2ecc71', 'B': '#a8e6cf', 'C': '#f39c12', 'D': '#e74c3c'}.get(c.tier, '#9090b0') %}
     {% set pct = (c.quality_score * 100) | int %}
     <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
-      <td style="padding:.6rem .75rem;color:var(--muted)">{{ rank }}</td>
-      <td style="padding:.6rem .75rem;font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
+      <td style="padding:.4rem .5rem;color:var(--muted)">{{ rank }}</td>
+      <td style="padding:.4rem .5rem;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
         <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=c.author_channel_id) }}" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
           {{ c.author_name or c.author_channel_id }}
         </a>
         {% if c.author_channel_id in channel_owner_ids %}
-        <span style="font-size:.7rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .4em;margin-left:.3em;vertical-align:middle">creator</span>
+        <span style="font-size:.65rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .35em;margin-left:.25em;vertical-align:middle">creator</span>
         {% endif %}
       </td>
-      <td style="padding:.6rem .75rem;text-align:center">
+      <td style="padding:.4rem .5rem;text-align:center">
         <span class="tier-badge tier-{{ c.tier }}">{{ c.tier }}</span>
       </td>
-      <td style="padding:.6rem .75rem">
-        <div style="display:flex;align-items:center;gap:.5rem">
-          <div style="flex:1;background:var(--border);border-radius:3px;height:6px;overflow:hidden">
+      <td style="padding:.4rem .5rem">
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
             <div style="width:{{ pct }}%;height:100%;background:{{ tier_color }};border-radius:3px"></div>
           </div>
-          <span style="font-size:.82rem;color:{{ tier_color }};min-width:2.5em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
+          <span style="font-size:.8rem;color:{{ tier_color }};min-width:2.2em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
         </div>
       </td>
-      <td style="padding:.6rem .75rem;text-align:right">{{ c.channel_count }}</td>
-      <td style="padding:.6rem .75rem;text-align:right">{{ c.comment_count }}</td>
-      <td style="padding:.6rem .75rem;text-align:right">{{ c.total_likes }}</td>
-      <td style="padding:.6rem .75rem;text-align:right;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
+      <td style="padding:.4rem .5rem;text-align:right">{{ c.channel_count }}</td>
+      <td style="padding:.4rem .5rem;text-align:right">{{ c.comment_count }}</td>
+      <td style="padding:.4rem .5rem;text-align:right">{{ c.total_likes }}</td>
+      <td style="padding:.4rem .5rem;text-align:right;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
         {{ ((c.reply_ratio or 0) * 100) | int }}%
       </td>
-      <td style="padding:.6rem .75rem">
-        <div style="display:flex;gap:.25rem;align-items:center;font-size:.75rem;color:var(--muted)">
-          <span title="Engagement">E:{{ "%.0f"|format((c.avg_engagement_norm or 0) * 100) }}%</span>
+      <td style="padding:.4rem .5rem">
+        <div style="display:flex;gap:.2rem;align-items:center;font-size:.73rem;white-space:nowrap">
+          {# E — Engagement: normalized like+view engagement across all commented videos #}
+          <span style="color:var(--muted)" title="E — Engagement: normalized engagement score across videos this commenter posted on (likes/views). Higher = they comment on high-engagement content.">E:{{ "%.0f"|format((c.avg_engagement_norm or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
-          <span title="Channel spread">C:{{ "%.0f"|format((c.channel_spread_score or 0) * 100) }}%</span>
+          {# C — Channel spread: how many distinct channels they comment on #}
+          <span style="color:var(--muted)" title="C — Channel spread: how many distinct channels this commenter is active on. Wider spread = more likely a genuine community member, not a single-channel fan.">C:{{ "%.0f"|format((c.channel_spread_score or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
-          <span title="Like ratio">L:{{ "%.0f"|format((c.like_ratio_score or 0) * 100) }}%</span>
+          {# L — Like ratio: percentile rank of average likes per comment #}
+          <span style="color:var(--muted)" title="L — Like ratio: percentile rank of average likes per comment within this community. Higher = community tends to agree with or appreciate their comments.">L:{{ "%.0f"|format((c.like_ratio_score or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
-          <span title="Factual anchors">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
+          {# F — Factual anchors: ratio of comments containing numbers, names, or citations #}
+          <span style="color:var(--muted)" title="F — Factual anchors: share of comments that contain numbers, specific names, or verifiable references. Higher = more evidence-based commenting style.">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
+          {# V — Vocabulary richness: type-token ratio percentile (unique/total words) #}
+          {% set v_pct = (c.vocab_richness_score or 0) %}
+          {% set v_color = '#2ecc71' if v_pct >= 0.65 else ('#f39c12' if v_pct >= 0.35 else '#e74c3c') %}
+          <span style="color:{{ v_color }};font-weight:500" title="V — Vocabulary richness: type-token ratio percentile. Measures how varied this commenter's word choice is across all their comments. High = diverse, analytical vocabulary. Low = repetitive phrases (sycophantic style).">V:{{ "%.0f"|format(v_pct * 100) }}%</span>
+          {# T — Substance: LLM-assessed quality (constructiveness + analytical depth) #}
           {% if c.llm_tone_score is not none %}
-          {% for label, val, title in [
-            ('Pol', c.llm_politeness_score, 'Politeness'),
-            ('Con', c.llm_constructiveness_score, 'Constructiveness'),
-            ('Dep', c.llm_depth_score, 'Analytical Depth'),
-          ] %}
-          {% set pct = ((val or 0) * 100) | int %}
-          {% set color = '#2ecc71' if (val or 0) >= 0.65 else ('#f39c12' if (val or 0) >= 0.35 else '#e74c3c') %}
-          <span title="{{ title }}: {{ pct }}% — {{ c.llm_tone_reason or '' }}"
-                style="color:{{ color }};font-weight:500">{{ label }}:{{ pct }}%</span>
-          {% if not loop.last %}<span style="color:var(--border)">·</span>{% endif %}
-          {% endfor %}
           <span style="color:var(--border)">·</span>
+          {% set t_color = '#2ecc71' if c.llm_tone_score >= 0.65 else ('#f39c12' if c.llm_tone_score >= 0.35 else '#e74c3c') %}
+          <span style="color:{{ t_color }};font-weight:500" title="T — Substance (LLM): AI-assessed score combining constructiveness (does it add facts/questions/nuance?) and analytical depth (does it engage with specifics?). Scored 0–1 by {{ c.llm_tone_backend }}/{{ c.llm_tone_model }}.&#10;&#10;Assessment: {{ c.llm_tone_reason or 'no detail' }}">T:{{ "%.0f"|format(c.llm_tone_score * 100) }}%</span>
           {% endif %}
-          <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
+          {# D — Defensiveness & Bragging: LLM-assessed creator behavior #}
           {% if c.llm_defensiveness_score is not none %}
           <span style="color:var(--border)">·</span>
           {% set def_color = '#2ecc71' if c.llm_defensiveness_score < 0.3 else ('#f39c12' if c.llm_defensiveness_score < 0.6 else '#e74c3c') %}
-          <span style="color:{{ def_color }}" title="Defensiveness: {{ c.llm_defensiveness_reason or 'no detail' }}">D:{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</span>
+          <span style="color:{{ def_color }};font-weight:500" title="D — Defensiveness &amp; Bragging (LLM): detects defensive reactions to criticism (dismissal, passive-aggression, spiritual shields) and unprompted self-promotion (credential-dropping, follower count mentions, spiritual one-upmanship). Lower is better.&#10;&#10;Assessment: {{ c.llm_defensiveness_reason or 'no detail' }}">D:{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</span>
           {% endif %}
         </div>
       </td>
@@ -248,19 +254,19 @@
 {% if total_pages > 1 %}
 <div style="display:flex;justify-content:center;gap:.5rem;margin-top:1.5rem;flex-wrap:wrap">
   {% if page > 1 %}
-  <a href="?page={{ page - 1 }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">← Prev</a>
+  <a href="?page={{ page - 1 }}&tier={{ tier_filter }}&sortkey={{ sort_by }}|{{ sort_dir }}" class="btn btn-outline" style="padding:.35rem .75rem">← Prev</a>
   {% endif %}
   {% for p in range(1, total_pages + 1) %}
     {% if p == page %}
     <span class="btn btn-primary" style="padding:.35rem .75rem">{{ p }}</span>
     {% elif (p - page)|abs <= 2 or p == 1 or p == total_pages %}
-    <a href="?page={{ p }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">{{ p }}</a>
+    <a href="?page={{ p }}&tier={{ tier_filter }}&sortkey={{ sort_by }}|{{ sort_dir }}" class="btn btn-outline" style="padding:.35rem .75rem">{{ p }}</a>
     {% elif (p - page)|abs == 3 %}
     <span style="padding:.35rem .25rem;color:var(--muted)">…</span>
     {% endif %}
   {% endfor %}
   {% if page < total_pages %}
-  <a href="?page={{ page + 1 }}&tier={{ tier_filter }}&sort={{ sort_by }}" class="btn btn-outline" style="padding:.35rem .75rem">Next →</a>
+  <a href="?page={{ page + 1 }}&tier={{ tier_filter }}&sortkey={{ sort_by }}|{{ sort_dir }}" class="btn btn-outline" style="padding:.35rem .75rem">Next →</a>
   {% endif %}
 </div>
 {% endif %}
