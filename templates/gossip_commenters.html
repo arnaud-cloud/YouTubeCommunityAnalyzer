@@ -148,6 +148,7 @@
       <option value="llm_politeness_score"     {% if sort_by == 'llm_politeness_score'     %}selected{% endif %}>Politeness</option>
       <option value="llm_constructiveness_score" {% if sort_by == 'llm_constructiveness_score' %}selected{% endif %}>Constructiveness</option>
       <option value="llm_depth_score"          {% if sort_by == 'llm_depth_score'          %}selected{% endif %}>Depth</option>
+      <option value="llm_defensiveness_score"  {% if sort_by == 'llm_defensiveness_score'  %}selected{% endif %}>Defensiveness ↑</option>
     </select>
     {% if tier_filter %}
     <input type="hidden" name="tier" value="{{ tier_filter }}">
@@ -230,6 +231,11 @@
           <span style="color:var(--border)">·</span>
           {% endif %}
           <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
+          {% if c.llm_defensiveness_score is not none %}
+          <span style="color:var(--border)">·</span>
+          {% set def_color = '#e74c3c' if c.llm_defensiveness_score >= 0.6 else ('#f39c12' if c.llm_defensiveness_score >= 0.3 else '#2ecc71') %}
+          <span style="color:{{ def_color }}" title="Defensiveness: {{ c.llm_defensiveness_reason or 'no detail' }}">D:{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</span>
+          {% endif %}
         </div>
       </td>
     </tr>

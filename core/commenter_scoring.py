@@ -306,6 +306,104 @@ _CREATOR_CONSOLIDATE_PROMPTS = {
     "english": _CREATOR_CONSOLIDATE_PROMPT,
 }
 
+# ── Creator defensiveness prompts ────────────────────────────────────────────
+
+_DEFENSIVENESS_PROMPT = """\
+IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
+
+You are analyzing whether a YouTube creator shows defensiveness in their public comments.
+
+CONTEXT: This creator presents themselves as spiritually advanced — calm, non-reactive, beyond ego.
+Your job is to find where this mask slips.
+
+Look specifically for:
+- Dismissing or belittling commenters who question, criticize, or challenge them
+- Using spiritual language as a shield ("you're not at my level", "low vibration energy", "that's your projection")
+- Passive-aggressive responses — outwardly calm but subtly cutting
+- Claiming detachment while visibly reacting (long rebuttals, sarcasm, condescension)
+- Shutting down dialogue with authority claims rather than engaging the substance
+- Needing the last word, especially after being challenged
+
+IMPORTANT CALIBRATION — even one instance already matters:
+  0.0 = no defensiveness detected — genuinely open, engages with criticism gracefully
+  0.2 = one very subtle instance — a slightly dismissive phrase, possibly accidental
+  0.4 = one clear instance — unmistakable defensiveness in at least one exchange
+  0.6 = multiple instances — recurring pattern that contradicts the "unshakeable" claim
+  0.8 = systematic — routinely defensive or dismissive when challenged
+  1.0 = extreme — aggressive, condescending, or using spiritual bypass to deflect all challenge
+
+Note: Polite disagreement is NOT defensiveness. Only score true defensiveness, not general negativity.
+In your reason, cite concrete behavior observed in the comments.
+
+Respond with JSON only:
+{"defensiveness": 0.4, "instances": 2, "reason": "one sentence citing specific behavior patterns"}"""
+
+_DEFENSIVENESS_PROMPT_FR = """\
+IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
+
+Vous analysez si un créateur YouTube montre de la défensivité dans ses commentaires publics.
+
+CONTEXTE : Ce créateur se présente comme spirituellement avancé — calme, non-réactif, au-delà de l'ego.
+Votre rôle est de trouver où ce masque se fissure.
+
+Recherchez spécifiquement :
+- Rejeter ou dénigrer les commentateurs qui les questionnent, critiquent ou défient
+- Utiliser le langage spirituel comme bouclier ("vous n'êtes pas à mon niveau", "basse vibration", "c'est votre projection")
+- Réponses passives-agressives — apparemment calmes mais subtilement blessantes
+- Prétendre au détachement tout en réagissant visiblement (longues réfutations, sarcasme, condescendance)
+- Fermer le dialogue par des affirmations d'autorité plutôt qu'en s'engageant sur le fond
+- Avoir besoin d'avoir le dernier mot, surtout après avoir été challengé
+
+CALIBRATION IMPORTANTE — même une seule instance compte :
+  0,0 = aucune défensivité détectée — genuinement ouvert, s'engage avec les critiques avec grâce
+  0,2 = une instance très subtile — une formulation légèrement dismissive, peut-être accidentelle
+  0,4 = une instance claire — défensivité indiscutable dans au moins un échange
+  0,6 = plusieurs instances — schéma récurrent qui contredit la prétention à l'imperturbabilité
+  0,8 = systématique — régulièrement défensif ou dismissif face aux défis
+  1,0 = extrême — agressif, condescendant, ou déviant spirituellement tout défi
+
+Remarque : Un désaccord poli standard n'est PAS de la défensivité. Évaluez uniquement la défensivité.
+Dans votre justification, citez des comportements concrets observés dans les commentaires.
+
+Répondez uniquement en JSON :
+{"defensiveness": 0.4, "instances": 2, "reason": "une phrase citant des comportements spécifiques"}"""
+
+_DEFENSIVENESS_PROMPT_ES = """\
+IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
+
+Estás analizando si un creador de YouTube muestra actitud defensiva en sus comentarios públicos.
+
+CONTEXTO: Este creador se presenta como espiritualmente avanzado — tranquilo, no reactivo, más allá del ego.
+Tu trabajo es encontrar dónde se rompe esta máscara.
+
+Busca específicamente:
+- Desestimar o menospreciar a los comentaristas que los cuestionan, critican o desafían
+- Usar el lenguaje espiritual como escudo ("no estás en mi nivel", "baja vibración", "eso es tu proyección")
+- Respuestas pasivo-agresivas — aparentemente tranquilas pero sutilmente hirientes
+- Alegar desapego mientras se reacciona visiblemente (largas réplicas, sarcasmo, condescendencia)
+- Cerrar el diálogo con afirmaciones de autoridad en lugar de abordar el fondo
+- Necesitar tener la última palabra, especialmente tras ser desafiados
+
+CALIBRACIÓN IMPORTANTE — incluso una sola instancia importa:
+  0,0 = no se detecta defensividad — genuinamente abierto, responde a las críticas con gracia
+  0,2 = una instancia muy sutil — una frase ligeramente desestimadora, posiblemente accidental
+  0,4 = una instancia clara — defensividad inconfundible en al menos un intercambio
+  0,6 = múltiples instancias — patrón recurrente que contradice la pretensión de ecuanimidad
+  0,8 = sistemático — habitualmente defensivo o desestimador cuando se le desafía
+  1,0 = extremo — agresivo, condescendiente, o usando bypass espiritual ante todo desafío
+
+Nota: El desacuerdo educado NO es defensividad. Evalúa solo la defensividad real.
+En tu justificación, cita comportamientos concretos observados en los comentarios.
+
+Responde únicamente con JSON:
+{"defensiveness": 0.4, "instances": 2, "reason": "una frase citando comportamientos específicos"}"""
+
+_DEFENSIVENESS_PROMPTS = {
+    "french": _DEFENSIVENESS_PROMPT_FR,
+    "spanish": _DEFENSIVENESS_PROMPT_ES,
+    "english": _DEFENSIVENESS_PROMPT,
+}
+
 
 def _score_tier(score: float) -> str:
     if score >= 0.65:
@@ -449,6 +547,10 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         # 7. Reply penalty (external channels only)
         reply_penalty = min(s["reply_ratio"] * 0.5, 0.3)
 
+        # 8. Defensiveness penalty (creators only; NULL for unassessed commenters)
+        defensiveness = s.get("llm_defensiveness_score")
+        defensiveness_penalty = min(float(defensiveness) * 0.4, 0.4) if defensiveness is not None else 0.0
+
         # Content-quality: combine T% + V% when both available, else V% alone
         llm_tone = s.get("llm_tone_score")
         if llm_tone is not None:
@@ -470,7 +572,9 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
                 + factual        * 0.15
                 + length_score   * 0.15
             )
-        quality_score = round(min(max(raw * (1.0 - reply_penalty), 0.0), 1.0), 4)
+        quality_score = round(
+            min(max(raw * (1.0 - reply_penalty) * (1.0 - defensiveness_penalty), 0.0), 1.0), 4
+        )
 
         enriched.append({
             **s,
@@ -505,7 +609,7 @@ def score_community(conn, community_id: int) -> int:
         log.info(f"commenter_scoring: no comments found for community {community_id}")
         return 0
 
-    # Preserve existing LLM tone scores across re-scoring
+    # Preserve existing LLM tone + defensiveness scores across re-scoring
     existing_tone: dict[str, dict] = {
         r["author_channel_id"]: {
             "llm_tone_score":              r["llm_tone_score"],
@@ -515,25 +619,32 @@ def score_community(conn, community_id: int) -> int:
             "llm_tone_reason":             r["llm_tone_reason"],
             "llm_tone_backend":            r["llm_tone_backend"],
             "llm_tone_model":              r["llm_tone_model"],
+            "llm_defensiveness_score":     r["llm_defensiveness_score"],
+            "llm_defensiveness_reason":    r["llm_defensiveness_reason"],
         }
         for r in conn.execute(
             "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
             "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
-            "llm_tone_backend, llm_tone_model "
-            "FROM commenter_scores WHERE community_id = ? AND llm_tone_score IS NOT NULL",
+            "llm_tone_backend, llm_tone_model, "
+            "llm_defensiveness_score, llm_defensiveness_reason "
+            "FROM commenter_scores WHERE community_id = ?",
             (community_id,),
         ).fetchall()
     }
     for s in stats:
         tone = existing_tone.get(s["author_channel_id"])
         if tone:
-            s["llm_tone_score"]             = tone["llm_tone_score"]
-            s["llm_politeness_score"]       = tone["llm_politeness_score"]
-            s["llm_constructiveness_score"] = tone["llm_constructiveness_score"]
-            s["llm_depth_score"]            = tone["llm_depth_score"]
-            s["llm_tone_reason"]            = tone["llm_tone_reason"]
-            s["llm_tone_backend"]           = tone["llm_tone_backend"]
-            s["llm_tone_model"]             = tone["llm_tone_model"]
+            if tone.get("llm_tone_score") is not None:
+                s["llm_tone_score"]             = tone["llm_tone_score"]
+                s["llm_politeness_score"]       = tone["llm_politeness_score"]
+                s["llm_constructiveness_score"] = tone["llm_constructiveness_score"]
+                s["llm_depth_score"]            = tone["llm_depth_score"]
+                s["llm_tone_reason"]            = tone["llm_tone_reason"]
+                s["llm_tone_backend"]           = tone["llm_tone_backend"]
+                s["llm_tone_model"]             = tone["llm_tone_model"]
+            if tone.get("llm_defensiveness_score") is not None:
+                s["llm_defensiveness_score"]    = tone["llm_defensiveness_score"]
+                s["llm_defensiveness_reason"]   = tone["llm_defensiveness_reason"]
 
     enriched = _compute_component_scores(stats)
 
@@ -548,9 +659,10 @@ def score_community(conn, community_id: int) -> int:
                 factual_anchor_score, avg_length_score, vocab_richness_score,
                 llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
                 llm_tone_reason, llm_tone_backend, llm_tone_model,
+                llm_defensiveness_score, llm_defensiveness_reason,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -571,6 +683,8 @@ def score_community(conn, community_id: int) -> int:
                 r.get("llm_tone_reason"),
                 r.get("llm_tone_backend"),
                 r.get("llm_tone_model"),
+                r.get("llm_defensiveness_score"),
+                r.get("llm_defensiveness_reason"),
                 r["reply_penalty"],
                 r["reply_ratio"],
                 r["comment_count"],
@@ -865,11 +979,14 @@ def score_community_tone(conn, community_id: int,
             "llm_tone_reason":             r["llm_tone_reason"],
             "llm_tone_backend":            r["llm_tone_backend"],
             "llm_tone_model":              r["llm_tone_model"],
+            "llm_defensiveness_score":     r["llm_defensiveness_score"],
+            "llm_defensiveness_reason":    r["llm_defensiveness_reason"],
         }
         for r in conn.execute(
             "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
             "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
-            "llm_tone_backend, llm_tone_model "
+            "llm_tone_backend, llm_tone_model, "
+            "llm_defensiveness_score, llm_defensiveness_reason "
             "FROM commenter_scores WHERE community_id = ?",
             (community_id,),
         ).fetchall()
@@ -884,6 +1001,9 @@ def score_community_tone(conn, community_id: int,
             s["llm_tone_reason"]            = t["llm_tone_reason"]
             s["llm_tone_backend"]           = t["llm_tone_backend"]
             s["llm_tone_model"]             = t["llm_tone_model"]
+        if t.get("llm_defensiveness_score") is not None:
+            s["llm_defensiveness_score"]    = t["llm_defensiveness_score"]
+            s["llm_defensiveness_reason"]   = t["llm_defensiveness_reason"]
 
     enriched = _compute_component_scores(stats)
 
@@ -898,9 +1018,10 @@ def score_community_tone(conn, community_id: int,
                 factual_anchor_score, avg_length_score, vocab_richness_score,
                 llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
                 llm_tone_reason, llm_tone_backend, llm_tone_model,
+                llm_defensiveness_score, llm_defensiveness_reason,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -921,6 +1042,8 @@ def score_community_tone(conn, community_id: int,
                 r.get("llm_tone_reason"),
                 r.get("llm_tone_backend"),
                 r.get("llm_tone_model"),
+                r.get("llm_defensiveness_score"),
+                r.get("llm_defensiveness_reason"),
                 r["reply_penalty"],
                 r["reply_ratio"],
                 r["comment_count"],
@@ -940,9 +1063,10 @@ def score_community_tone(conn, community_id: int,
     return total_scored
 
 
-def _localise_creator_prompts(conn, community_id: int, llm) -> tuple[str, str]:
+def _localise_creator_prompts(conn, community_id: int, llm) -> tuple[str, str, str]:
     """
-    Return (batch_prompt, consolidate_prompt) localised to the community's language.
+    Return (batch_prompt, consolidate_prompt, defensiveness_prompt) localised to the
+    community's language. Single language-detection call shared across all three.
     """
     sample_rows = conn.execute(
         """SELECT text FROM comments
@@ -957,7 +1081,7 @@ def _localise_creator_prompts(conn, community_id: int, llm) -> tuple[str, str]:
     ).fetchall()
 
     if not sample_rows:
-        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT
+        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT, _DEFENSIVENESS_PROMPT
 
     sample_text = "\n".join(r["text"][:100] for r in sample_rows)
     try:
@@ -969,12 +1093,13 @@ def _localise_creator_prompts(conn, community_id: int, llm) -> tuple[str, str]:
         ).strip().strip(".").lower()
     except Exception as e:
         log.warning(f"commenter_scoring: creator language detection failed: {e}, using English prompt")
-        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT
+        return _CREATOR_BATCH_PROMPT, _CREATOR_CONSOLIDATE_PROMPT, _DEFENSIVENESS_PROMPT
 
     batch = _CREATOR_BATCH_PROMPTS.get(lang, _CREATOR_BATCH_PROMPT)
     consolidate = _CREATOR_CONSOLIDATE_PROMPTS.get(lang, _CREATOR_CONSOLIDATE_PROMPT)
+    defensiveness = _DEFENSIVENESS_PROMPTS.get(lang, _DEFENSIVENESS_PROMPT)
     log.info(f"commenter_scoring: creator prompts localised to '{lang}'")
-    return batch, consolidate
+    return batch, consolidate, defensiveness
 
 
 def _score_creator_detailed(
@@ -1144,6 +1269,89 @@ def _score_creator_detailed(
     return True
 
 
+def _assess_creator_defensiveness(
+    conn, community_id: int,
+    author_channel_id: str, author_name: str,
+    llm, channel_ids: list[str],
+    system_prompt: str,
+    current_backend: str, current_model: str,
+) -> bool:
+    """
+    Assess defensiveness for a single creator using a focused prompt.
+    Prioritises reply comments (where defensive behaviour surfaces) and
+    tops up with regular comments to reach up to 60 samples total.
+    Returns True if the score was stored successfully.
+    """
+    ph = ",".join("?" * len(channel_ids))
+
+    # Fetch replies first (defensiveness shows in responses to others)
+    reply_rows = conn.execute(
+        f"SELECT text FROM comments "
+        f"WHERE channel_id IN ({ph}) AND author_channel_id = ? AND is_reply = 1 "
+        f"AND text IS NOT NULL AND LENGTH(text) > 10 "
+        f"ORDER BY like_count DESC LIMIT 60",
+        channel_ids + [author_channel_id],
+    ).fetchall()
+    replies = [r["text"] for r in reply_rows]
+
+    # Top up with regular comments if fewer than 20 replies
+    if len(replies) < 20:
+        needed = 60 - len(replies)
+        other_rows = conn.execute(
+            f"SELECT text FROM comments "
+            f"WHERE channel_id IN ({ph}) AND author_channel_id = ? AND is_reply = 0 "
+            f"AND text IS NOT NULL AND LENGTH(text) > 10 "
+            f"ORDER BY like_count DESC LIMIT {needed}",
+            channel_ids + [author_channel_id],
+        ).fetchall()
+        comments = replies + [r["text"] for r in other_rows]
+    else:
+        comments = replies
+
+    if not comments:
+        return False
+
+    log.info(
+        f"commenter_scoring: defensiveness assessment — {author_name} "
+        f"({len(replies)} replies + {len(comments)-len(replies)} other comments)"
+    )
+
+    comment_block = "\n".join(f"  [{i+1}] {c[:300]}" for i, c in enumerate(comments))
+    user_prompt = f"Creator: {author_name}\n\nComments/replies ({len(comments)}):\n{comment_block}"
+
+    try:
+        result = llm.complete_json(system_prompt, user_prompt, max_tokens=256)
+        if not isinstance(result, dict):
+            log.warning(f"commenter_scoring: defensiveness — non-dict response for {author_name}")
+            return False
+
+        def _clamp(v):
+            try:
+                return round(min(max(float(v), 0.0), 1.0), 4)
+            except (TypeError, ValueError):
+                return None
+
+        score = _clamp(result.get("defensiveness"))
+        reason = result.get("reason", "")
+        if score is None:
+            log.warning(f"commenter_scoring: defensiveness — no score returned for {author_name}: {result}")
+            return False
+
+        conn.execute(
+            "UPDATE commenter_scores "
+            "SET llm_defensiveness_score = ?, llm_defensiveness_reason = ? "
+            "WHERE community_id = ? AND author_channel_id = ?",
+            (score, reason, community_id, author_channel_id),
+        )
+        conn.commit()
+        log.info(f"commenter_scoring: defensiveness={score:.2f} for {author_name} — {reason}")
+        return True
+
+    except Exception as e:
+        log.warning(f"commenter_scoring: defensiveness assessment failed for {author_name}: {e}")
+        return False
+
+
 def score_community_creators_detailed(conn, community_id: int,
                                        progress_callback=None) -> int:
     """
@@ -1158,9 +1366,8 @@ def score_community_creators_detailed(conn, community_id: int,
     current_backend = llm.backend
     current_model = llm._model
 
-    system_prompt_batch, system_prompt_consolidate = _localise_creator_prompts(
-        conn, community_id, llm
-    )
+    system_prompt_batch, system_prompt_consolidate, system_prompt_defensiveness = \
+        _localise_creator_prompts(conn, community_id, llm)
 
     channel_ids = get_community_channel_ids(conn, community_id)
     if not channel_ids:
@@ -1181,7 +1388,7 @@ def score_community_creators_detailed(conn, community_id: int,
     total_scored = 0
     for i, row in enumerate(rows):
         if progress_callback:
-            progress_callback(i, len(rows))
+            progress_callback(i, len(rows) * 2)  # *2: tone + defensiveness passes
         success = _score_creator_detailed(
             conn, community_id,
             row["author_channel_id"], row["author_name"],
@@ -1191,9 +1398,17 @@ def score_community_creators_detailed(conn, community_id: int,
         )
         if success:
             total_scored += 1
+        # Defensiveness pass — independent of tone success
+        _assess_creator_defensiveness(
+            conn, community_id,
+            row["author_channel_id"], row["author_name"],
+            llm, channel_ids,
+            system_prompt_defensiveness,
+            current_backend, current_model,
+        )
 
     if total_scored > 0:
-        # Recompute quality_score / tier with the new LLM scores
+        # Recompute quality_score / tier with all new LLM scores
         stats = _load_commenter_stats(conn, channel_ids)
         tone_map = {
             r["author_channel_id"]: {
@@ -1204,11 +1419,14 @@ def score_community_creators_detailed(conn, community_id: int,
                 "llm_tone_reason":             r["llm_tone_reason"],
                 "llm_tone_backend":            r["llm_tone_backend"],
                 "llm_tone_model":              r["llm_tone_model"],
+                "llm_defensiveness_score":     r["llm_defensiveness_score"],
+                "llm_defensiveness_reason":    r["llm_defensiveness_reason"],
             }
             for r in conn.execute(
                 "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
                 "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
-                "llm_tone_backend, llm_tone_model "
+                "llm_tone_backend, llm_tone_model, "
+                "llm_defensiveness_score, llm_defensiveness_reason "
                 "FROM commenter_scores WHERE community_id = ?",
                 (community_id,),
             ).fetchall()
@@ -1223,6 +1441,9 @@ def score_community_creators_detailed(conn, community_id: int,
                 s["llm_tone_reason"]            = t["llm_tone_reason"]
                 s["llm_tone_backend"]           = t["llm_tone_backend"]
                 s["llm_tone_model"]             = t["llm_tone_model"]
+            if t.get("llm_defensiveness_score") is not None:
+                s["llm_defensiveness_score"]    = t["llm_defensiveness_score"]
+                s["llm_defensiveness_reason"]   = t["llm_defensiveness_reason"]
 
         enriched = _compute_component_scores(stats)
         conn.execute("DELETE FROM commenter_scores WHERE community_id = ?", (community_id,))
@@ -1234,9 +1455,10 @@ def score_community_creators_detailed(conn, community_id: int,
                     factual_anchor_score, avg_length_score, vocab_richness_score,
                     llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
                     llm_tone_reason, llm_tone_backend, llm_tone_model,
+                    llm_defensiveness_score, llm_defensiveness_reason,
                     reply_penalty, reply_ratio,
                     comment_count, channel_count, total_likes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             [
                 (
                     community_id,
@@ -1257,6 +1479,8 @@ def score_community_creators_detailed(conn, community_id: int,
                     r.get("llm_tone_reason"),
                     r.get("llm_tone_backend"),
                     r.get("llm_tone_model"),
+                    r.get("llm_defensiveness_score"),
+                    r.get("llm_defensiveness_reason"),
                     r["reply_penalty"],
                     r["reply_ratio"],
                     r["comment_count"],

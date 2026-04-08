@@ -244,6 +244,8 @@ CREATE TABLE IF NOT EXISTS commenter_scores (
     llm_tone_reason           TEXT,
     llm_tone_backend          TEXT,
     llm_tone_model            TEXT,
+    llm_defensiveness_score   REAL,
+    llm_defensiveness_reason  TEXT,
     reply_penalty        REAL,
     reply_ratio          REAL,
     comment_count        INTEGER,

@@ -94,6 +94,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_backend TEXT")
     if "llm_tone_model" not in cs_cols:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_model TEXT")
+    if "llm_defensiveness_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_defensiveness_score REAL")
+    if "llm_defensiveness_reason" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_defensiveness_reason TEXT")
 
     # gossip_items: evidence_quality_score column
     gi_cols = {row[1] for row in conn.execute("PRAGMA table_info(gossip_items)")}

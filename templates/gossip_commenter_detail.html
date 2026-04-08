@@ -68,6 +68,17 @@
       </div>
       <span style="width:32px;text-align:right;font-size:.8rem">{{ (score.vocab_richness_score * 100) | int }}%</span>
     </div>
+    {% if score.llm_defensiveness_score is not none %}
+    {% set def_pct = (score.llm_defensiveness_score * 100) | int %}
+    {% set def_color = '#e74c3c' if score.llm_defensiveness_score >= 0.6 else ('#f39c12' if score.llm_defensiveness_score >= 0.3 else '#2ecc71') %}
+    <div style="display:flex;align-items:center;gap:.5rem;margin-top:.2rem">
+      <span style="width:130px;font-size:.8rem;color:{{ def_color }}">Defensiveness (D)</span>
+      <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+        <div style="width:{{ def_pct }}%;height:100%;background:{{ def_color }};border-radius:3px"></div>
+      </div>
+      <span style="width:32px;text-align:right;font-size:.8rem;color:{{ def_color }}">{{ def_pct }}%</span>
+    </div>
+    {% endif %}
     {% if score.reply_ratio is not none %}
     <div style="display:flex;align-items:center;gap:.5rem;margin-top:.2rem">
       <span style="width:110px;font-size:.8rem;color:var(--muted)">Reply penalty</span>
@@ -103,12 +114,37 @@
 
 {# ── LLM Tone reason ────────────────────────────────────────────────────── #}
 {% if score.llm_tone_reason %}
-<div style="background:var(--surface);border:1px solid #a8e6cf44;border-radius:8px;padding:1.1rem 1.25rem;margin-bottom:1.5rem">
+<div style="background:var(--surface);border:1px solid #a8e6cf44;border-radius:8px;padding:1.1rem 1.25rem;margin-bottom:1rem">
   <div style="font-size:.8rem;color:#a8e6cf;font-weight:600;margin-bottom:.4rem">
     🎭 LLM Tone Assessment
     <span style="font-weight:400;color:var(--muted);margin-left:.5rem">{{ score.llm_tone_backend }} / {{ score.llm_tone_model }}</span>
   </div>
   <div style="font-size:.95rem;line-height:1.5">{{ score.llm_tone_reason }}</div>
+</div>
+{% endif %}
+
+{# ── Defensiveness card ─────────────────────────────────────────────────── #}
+{% if score.llm_defensiveness_score is not none %}
+{% set def_pct = (score.llm_defensiveness_score * 100) | int %}
+{% set def_color = '#e74c3c' if score.llm_defensiveness_score >= 0.6 else ('#f39c12' if score.llm_defensiveness_score >= 0.3 else '#2ecc71') %}
+<div style="background:var(--surface);border:1px solid {{ def_color }}44;border-radius:8px;padding:1.1rem 1.25rem;margin-bottom:1.5rem">
+  <div style="font-size:.8rem;font-weight:600;margin-bottom:.75rem;color:{{ def_color }}">
+    🛡️ Defensiveness Score
+    <span style="font-size:1.4rem;margin-left:.75rem;font-weight:700">{{ def_pct }}%</span>
+    <span style="font-weight:400;font-size:.8rem;color:var(--muted);margin-left:.5rem">
+      {% if score.llm_defensiveness_score < 0.2 %}None detected
+      {% elif score.llm_defensiveness_score < 0.4 %}Very subtle
+      {% elif score.llm_defensiveness_score < 0.6 %}One clear instance
+      {% elif score.llm_defensiveness_score < 0.8 %}Recurring pattern
+      {% else %}Systematic{% endif %}
+    </span>
+  </div>
+  <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden;margin-bottom:.75rem">
+    <div style="width:{{ def_pct }}%;height:100%;background:{{ def_color }};border-radius:4px;transition:width .3s"></div>
+  </div>
+  {% if score.llm_defensiveness_reason %}
+  <div style="font-size:.9rem;line-height:1.5;color:var(--text)">{{ score.llm_defensiveness_reason }}</div>
+  {% endif %}
 </div>
 {% endif %}
 
