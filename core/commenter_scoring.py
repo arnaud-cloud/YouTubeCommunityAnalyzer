@@ -331,7 +331,7 @@ BRAGGING — unsolicited self-promotion or status signalling:
 - Spiritual one-upmanship ("at my level of consciousness...", "after years of deep practice...")
 - Turning other people's questions or struggles into an opportunity to showcase themselves
 
-SCALE — instances of either type count toward the score:
+COMBINED SCORE — count instances of BOTH types together into a single ego_score:
   0.0        = none found. DEFAULT: use this when you cannot cite a specific example.
   0.2 – 0.49 = subtle instances only — ambiguous, no clear case. More subtle instances → higher in this range.
   0.5        = one clear, unmistakable instance (base score; additional subtle cases push slightly above 0.5)
@@ -344,8 +344,9 @@ RULES:
 - "Clear instance" = unmistakable behavior that a neutral observer would agree on.
 - "Subtle instance" = could be interpreted charitably, but leans defensive or boastful.
 - Answering a direct question about oneself is NOT bragging. Correcting misinformation is NOT defensiveness.
+- Output ONE single JSON object. Do NOT produce separate objects for each behavior type.
 
-Respond with JSON only:
+Respond with a single JSON object only:
 {"defensiveness": 0.0, "instances": 0, "reason": "max one sentence — cite comment numbers as evidence (e.g. '[12] dismissive reply'), or state none found"}"""
 
 _DEFENSIVENESS_PROMPT_FR = """\
@@ -371,7 +372,7 @@ VANTARDISE — auto-promotion ou signalisation de statut non sollicitées :
 - Surenchère spirituelle ("à mon niveau de conscience...", "après des années de pratique profonde...")
 - Transformer les questions ou difficultés des autres en occasion de se mettre en valeur
 
-ÉCHELLE — les instances des deux types comptent :
+SCORE COMBINÉ — comptez les instances des DEUX types ensemble dans un seul ego_score :
   0,0         = aucune trouvée. VALEUR PAR DÉFAUT : utilisez-la si vous ne pouvez pas citer d'exemple concret.
   0,2 – 0,49  = instances subtiles uniquement — ambiguës, aucun cas clair. Plus d'instances → score plus haut.
   0,5         = un cas clair et indiscutable (score de base ; des cas subtils supplémentaires poussent légèrement au-dessus)
@@ -384,8 +385,9 @@ RÈGLES :
 - "Cas clair" = comportement indiscutable qu'un observateur neutre reconnaîtrait.
 - "Instance subtile" = pourrait être interprétée charitablement, mais penche vers la défensivité ou la vantardise.
 - Répondre à une question directe sur soi n'est PAS de la vantardise. Corriger une erreur n'est PAS de la défensivité.
+- Produisez UN SEUL objet JSON. Ne produisez PAS d'objets séparés pour chaque type de comportement.
 
-Répondez uniquement en JSON :
+Répondez avec un seul objet JSON :
 {"defensiveness": 0.0, "instances": 0, "reason": "une phrase max — citez les numéros de commentaires comme preuves (ex. '[12] réponse dismissive'), ou indiquez qu'aucune n'a été trouvée"}"""
 
 _DEFENSIVENESS_PROMPT_ES = """\
@@ -411,7 +413,7 @@ FANFARRONERÍA — autopromoción o señalización de estatus no solicitadas:
 - Superioridad espiritual ("a mi nivel de conciencia...", "tras años de práctica profunda...")
 - Convertir las preguntas o dificultades de otros en una oportunidad para destacarse
 
-ESCALA — las instancias de ambos tipos cuentan:
+PUNTUACIÓN COMBINADA — cuenta instancias de AMBOS tipos juntas en una sola ego_score:
   0,0        = ninguna encontrada. VALOR POR DEFECTO: úsalo cuando no puedas citar un ejemplo concreto.
   0,2 – 0,49 = instancias sutiles únicamente — ambiguas, sin caso claro. Más instancias → más alto en el rango.
   0,5        = una instancia clara e inconfundible (puntuación base; casos sutiles adicionales empujan ligeramente por encima)
@@ -424,8 +426,9 @@ REGLAS:
 - "Instancia clara" = comportamiento inconfundible que un observador neutral reconocería.
 - "Instancia sutil" = podría interpretarse favorablemente, pero se inclina hacia la defensividad o fanfarronería.
 - Responder una pregunta directa sobre uno mismo NO es fanfarronería. Corregir información errónea NO es defensividad.
+- Produce UN SOLO objeto JSON. NO produzcas objetos separados para cada tipo de comportamiento.
 
-Responde únicamente con JSON:
+Responde con un único objeto JSON:
 {"defensiveness": 0.0, "instances": 0, "reason": "máximo una frase — cita números de comentarios como evidencia (ej. '[12] respuesta desestimadora'), o indica que no se encontró ninguna"}"""
 
 _DEFENSIVENESS_PROMPTS = {

@@ -164,8 +164,15 @@ class LLMClient:
 
         try:
             return json.loads(cleaned)
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            # "Extra data" means multiple JSON objects were returned — take the first one
+            if "Extra data" in str(e):
+                try:
+                    first = json.loads(cleaned[:e.pos])
+                    log.warning("JSON had extra data after first object — using first object only.")
+                    return first
+                except json.JSONDecodeError:
+                    pass
 
         repaired = self._repair_json(cleaned)
         try:
