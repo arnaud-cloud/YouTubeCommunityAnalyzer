@@ -450,56 +450,37 @@ def score_community_tone(conn, community_id: int,
         if progress_callback:
             progress_callback(batch_start, len(rows))
 
-        try:
-            result = llm.complete_json(_TONE_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
-        except Exception as e:
-            log.warning(f"commenter_scoring: tone batch failed: {e}")
-            continue
+        def _normalise_scores(result) -> list | None:
+            """Return a list of score items from any shape the model returns, or None on failure."""
+            if isinstance(result, list):
+                return result
+            if isinstance(result, dict):
+                if "scores" in result:
+                    s = result["scores"]
+                    return s if isinstance(s, list) else [s]
+                if "index" in result or "score" in result:
+                    return [result]
+                log.warning(f"commenter_scoring: unrecognised result shape — keys: {list(result.keys())}")
+                return None
+            log.warning(f"commenter_scoring: unexpected result type {type(result)}")
+            return None
 
-        # Normalise result into a list of score items regardless of wrapper shape
-        if isinstance(result, list):
-            # Model returned a bare array: [{index, score, reason}, ...]
-            scores = result
-        elif isinstance(result, dict):
-            if "scores" in result:
-                scores = result["scores"]
-                if not isinstance(scores, list):
-                    scores = [scores]
-            elif "index" in result or "score" in result:
-                # Model returned a single flat object instead of a wrapped array
-                scores = [result]
-            else:
-                log.warning(f"commenter_scoring: unrecognised result shape — keys: {list(result.keys())}, full: {result!r}")
-                continue
-        else:
-            log.warning(f"commenter_scoring: unexpected result type {type(result)}: {result!r}")
-            continue
-
-        matched = 0
-        # Match results back by index
-        for item in scores:
+        def _store_score(item, idx_map) -> bool:
+            """Parse one score item and write to DB. Returns True on success."""
             raw_index = item.get("index")
             tone_score = item.get("score")
             reason = item.get("reason", "")
             try:
                 item_index = int(raw_index)
             except (TypeError, ValueError):
-                log.warning(f"commenter_scoring: bad index {raw_index!r} in item {item!r}")
-
-                continue
-            aid = index_to_aid.get(item_index)
-            if tone_score is None:
-                log.warning(f"commenter_scoring: missing score in item {item!r}")
-                continue
-            if aid is None:
-                log.warning(f"commenter_scoring: index {item_index} not in index_to_aid {list(index_to_aid.keys())}")
-                continue
+                return False
+            aid = idx_map.get(item_index)
+            if aid is None or tone_score is None:
+                return False
             try:
-                tone_score = float(tone_score)
-                tone_score = round(min(max(tone_score, 0.0), 1.0), 4)
+                tone_score = round(min(max(float(tone_score), 0.0), 1.0), 4)
             except (TypeError, ValueError):
-                log.warning(f"commenter_scoring: could not parse score {tone_score!r}")
-                continue
+                return False
             conn.execute(
                 "UPDATE commenter_scores "
                 "SET llm_tone_score = ?, llm_tone_reason = ?, "
@@ -507,15 +488,47 @@ def score_community_tone(conn, community_id: int,
                 "WHERE community_id = ? AND author_channel_id = ?",
                 (tone_score, reason, current_backend, current_model, community_id, aid),
             )
-            matched += 1
-            total_scored += 1
+            return True
 
+        # Try the full batch first
+        matched = 0
+        try:
+            result = llm.complete_json(_TONE_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
+            score_items = _normalise_scores(result)
+            if score_items:
+                for item in score_items:
+                    if _store_score(item, index_to_aid):
+                        matched += 1
+                        total_scored += 1
+        except Exception as e:
+            log.warning(f"commenter_scoring: batch failed: {e}")
+
+        # Retry individually for any commenter not matched
         if matched < len(sections):
-            log.warning(
-                f"commenter_scoring: batch matched {matched}/{len(sections)} — "
-                f"result keys: {list(result.keys())}, "
-                f"first item: {scores[0] if scores else 'empty'}"
-            )
+            log.info(f"commenter_scoring: batch matched {matched}/{len(sections)}, retrying {len(sections) - matched} individually")
+            for solo_idx, section in zip(index_to_aid.keys(), sections):
+                if matched > 0:
+                    # Check if this specific commenter was already matched
+                    aid = index_to_aid[solo_idx]
+                    already = conn.execute(
+                        "SELECT llm_tone_score FROM commenter_scores "
+                        "WHERE community_id = ? AND author_channel_id = ? AND llm_tone_score IS NOT NULL",
+                        (community_id, aid),
+                    ).fetchone()
+                    if already:
+                        continue
+                solo_prompt = f"Rate the following 1 commenter.\n\n{section}"
+                solo_idx_map = {solo_idx: index_to_aid[solo_idx]}
+                try:
+                    result = llm.complete_json(_TONE_SYSTEM_PROMPT, solo_prompt, max_tokens=256)
+                    score_items = _normalise_scores(result)
+                    if score_items:
+                        for item in score_items:
+                            if _store_score(item, solo_idx_map):
+                                total_scored += 1
+                except Exception as e:
+                    log.warning(f"commenter_scoring: solo retry failed for index {solo_idx}: {e}")
+
         conn.commit()
 
     if total_scored == 0:
