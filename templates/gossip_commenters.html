@@ -200,7 +200,7 @@
     {% set pct = (c.quality_score * 100) | int %}
     <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
       <td style="padding:.4rem .5rem;color:var(--muted)" data-rank="{{ rank }}">{{ rank }}</td>
-      <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
+      <td style="padding:.4rem .5rem;font-weight:500;max-width:108px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
         <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=c.author_channel_id) }}" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
           {{ c.author_name or c.author_channel_id }}
         </a>
