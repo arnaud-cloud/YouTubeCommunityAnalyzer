@@ -351,6 +351,60 @@ def score_community(conn, community_id: int) -> int:
     return len(enriched)
 
 
+def _localise_tone_prompt(conn, community_id: int, llm) -> str:
+    """
+    Detect the dominant language of the community's comments and return
+    the tone system prompt translated into that language.
+    Falls back to English prompt on any error.
+    """
+    # Sample 30 comments for language detection
+    sample_rows = conn.execute(
+        """SELECT text FROM comments
+           WHERE channel_id IN (
+               SELECT source_id FROM community_sources WHERE community_id = ?
+               UNION
+               SELECT channel_id FROM community_channels WHERE community_id = ?
+           )
+           AND text IS NOT NULL AND LENGTH(text) > 20
+           ORDER BY RANDOM() LIMIT 30""",
+        (community_id, community_id),
+    ).fetchall()
+
+    if not sample_rows:
+        return _TONE_SYSTEM_PROMPT
+
+    sample_text = "\n".join(r["text"][:100] for r in sample_rows)
+
+    try:
+        lang = llm.complete(
+            "You are a language detector. Reply with only the language name in English "
+            "(e.g. 'French', 'English', 'Spanish', 'German'). Nothing else.",
+            f"What language are most of these comments written in?\n\n{sample_text}",
+            max_tokens=16,
+        ).strip().strip(".")
+    except Exception as e:
+        log.warning(f"commenter_scoring: language detection failed: {e}")
+        return _TONE_SYSTEM_PROMPT
+
+    if lang.lower() in ("english", "en"):
+        log.info("commenter_scoring: community language detected as English, using default prompt")
+        return _TONE_SYSTEM_PROMPT
+
+    log.info(f"commenter_scoring: community language detected as '{lang}', translating prompt")
+    try:
+        translated = llm.complete(
+            "You are a professional translator. Translate the following text accurately into "
+            f"{lang}, preserving all formatting, structure, capitalisation, and JSON examples exactly.",
+            _TONE_SYSTEM_PROMPT,
+            max_tokens=1024,
+        )
+        log.info(f"commenter_scoring: prompt translated to {lang} ({len(translated)} chars)")
+        return translated
+    except Exception as e:
+        log.warning(f"commenter_scoring: prompt translation failed: {e}, falling back to English")
+        return _TONE_SYSTEM_PROMPT
+
+
 def score_community_tone(conn, community_id: int,
                          progress_callback=None,
                          scope: str = "all") -> int:
@@ -370,6 +424,9 @@ def score_community_tone(conn, community_id: int,
     llm = LLMClient(cfg, role="tone")
     current_backend = llm.backend
     current_model = llm._model
+
+    # Auto-detect community language and translate system prompt if needed
+    system_prompt = _localise_tone_prompt(conn, community_id, llm)
 
     # Determine creator channel IDs when scoping to creators only
     creator_ids: set[str] | None = None
@@ -493,7 +550,7 @@ def score_community_tone(conn, community_id: int,
         # Try the full batch first
         matched = 0
         try:
-            result = llm.complete_json(_TONE_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
+            result = llm.complete_json(system_prompt, user_prompt, max_tokens=1024)
             score_items = _normalise_scores(result)
             if score_items:
                 for item in score_items:
@@ -520,7 +577,7 @@ def score_community_tone(conn, community_id: int,
                 solo_prompt = f"Rate the following 1 commenter.\n\n{section}"
                 solo_idx_map = {solo_idx: index_to_aid[solo_idx]}
                 try:
-                    result = llm.complete_json(_TONE_SYSTEM_PROMPT, solo_prompt, max_tokens=256)
+                    result = llm.complete_json(system_prompt, solo_prompt, max_tokens=256)
                     score_items = _normalise_scores(result)
                     if score_items:
                         for item in score_items:
