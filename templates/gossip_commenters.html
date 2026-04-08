@@ -187,7 +187,6 @@
       <th style="padding:.4rem .5rem">Name</th>
       <th style="padding:.4rem .5rem;width:3.5rem;text-align:center">Tier</th>
       <th style="padding:.4rem .5rem;min-width:110px">Score</th>
-      <th style="padding:.4rem .4rem;text-align:right">Ch.</th>
       <th style="padding:.4rem .4rem;text-align:right">Cmts</th>
       <th style="padding:.4rem .4rem;text-align:right">Likes</th>
       <th style="padding:.4rem .4rem;text-align:right">Rep%</th>
@@ -225,7 +224,6 @@
           <span style="font-size:.8rem;color:{{ tier_color }};min-width:2.2em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
         </div>
       </td>
-      <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.channel_count }}</td>
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.comment_count }}</td>
       <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.total_likes }}</td>
       <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
