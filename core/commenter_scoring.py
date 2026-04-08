@@ -509,7 +509,7 @@ def score_community_tone(conn, community_id: int,
     channel_ids = get_community_channel_ids(conn, community_id)
     ph = ",".join("?" * len(channel_ids))
 
-    BATCH_SIZE = 5
+    BATCH_SIZE = 10
     COMMENTS_PER_AUTHOR = 30
     total_scored = 0
 
@@ -621,44 +621,50 @@ def score_community_tone(conn, community_id: int,
             )
             return True
 
-        # Try the full batch first
-        matched = 0
-        try:
-            result = llm.complete_json(system_prompt, user_prompt, max_tokens=1024)
-            score_items = _normalise_scores(result)
-            if score_items:
-                for item in score_items:
-                    if _store_score(item, index_to_aid):
-                        matched += 1
-                        total_scored += 1
-        except Exception as e:
-            log.warning(f"commenter_scoring: batch failed: {e}")
+        def _try_batch(sects: list[str], idx_map: dict[int, str], max_tok: int) -> set[int]:
+            """Submit a batch prompt, return set of indices successfully stored."""
+            prompt = f"Rate the following {len(sects)} commenter(s).\n\n" + "\n\n".join(sects)
+            try:
+                result = llm.complete_json(system_prompt, prompt, max_tokens=max_tok)
+                items = _normalise_scores(result)
+                if not items:
+                    return set()
+                stored = set()
+                for item in items:
+                    if _store_score(item, idx_map):
+                        stored.add(int(item.get("index", -1)))
+                return stored
+            except Exception as e:
+                log.warning(f"commenter_scoring: batch of {len(sects)} failed: {e}")
+                return set()
 
-        # Retry individually for any commenter not matched
-        if matched < len(sections):
-            log.info(f"commenter_scoring: batch matched {matched}/{len(sections)}, retrying {len(sections) - matched} individually")
-            for solo_idx, section in zip(index_to_aid.keys(), sections):
-                if matched > 0:
-                    # Check if this specific commenter was already matched
-                    aid = index_to_aid[solo_idx]
-                    already = conn.execute(
-                        "SELECT llm_tone_score FROM commenter_scores "
-                        "WHERE community_id = ? AND author_channel_id = ? AND llm_tone_score IS NOT NULL",
-                        (community_id, aid),
-                    ).fetchone()
-                    if already:
-                        continue
-                solo_prompt = f"Rate the following 1 commenter.\n\n{section}"
-                solo_idx_map = {solo_idx: index_to_aid[solo_idx]}
-                try:
-                    result = llm.complete_json(system_prompt, solo_prompt, max_tokens=256)
-                    score_items = _normalise_scores(result)
-                    if score_items:
-                        for item in score_items:
-                            if _store_score(item, solo_idx_map):
-                                total_scored += 1
-                except Exception as e:
-                    log.warning(f"commenter_scoring: solo retry failed for index {solo_idx}: {e}")
+        # Tier 1: full batch of 10
+        matched_indices = _try_batch(sections, index_to_aid, max_tok=1024)
+        total_scored += len(matched_indices)
+
+        # Tier 2: sub-batches of 5 for unmatched
+        unmatched = [(i, s) for i, s in zip(index_to_aid.keys(), sections)
+                     if i not in matched_indices]
+        if unmatched:
+            log.info(f"commenter_scoring: {len(unmatched)}/{len(sections)} unmatched, retrying in sub-batches of 5")
+            SUB_BATCH = 5
+            for sub_start in range(0, len(unmatched), SUB_BATCH):
+                sub = unmatched[sub_start: sub_start + SUB_BATCH]
+                sub_idxs = [i for i, _ in sub]
+                sub_sects = [s for _, s in sub]
+                sub_map = {i: index_to_aid[i] for i in sub_idxs}
+                stored = _try_batch(sub_sects, sub_map, max_tok=512)
+                total_scored += len(stored)
+                matched_indices |= stored
+
+        # Tier 3: one-by-one for still-unmatched
+        still_unmatched = [(i, s) for i, s in zip(index_to_aid.keys(), sections)
+                           if i not in matched_indices]
+        if still_unmatched:
+            log.info(f"commenter_scoring: {len(still_unmatched)} still unmatched, retrying one-by-one")
+            for solo_idx, solo_sect in still_unmatched:
+                stored = _try_batch([solo_sect], {solo_idx: index_to_aid[solo_idx]}, max_tok=256)
+                total_scored += len(stored)
 
         conn.commit()
 
