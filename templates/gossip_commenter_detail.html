@@ -27,71 +27,19 @@
   </div>
 
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem">
-    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.75rem">Score breakdown</div>
+    <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem">Score breakdown</div>
 
-    {# Helper macro: metric row with optional reason text #}
-    {# E — Engagement #}
-    {% set e_pct = (score.avg_engagement_norm * 100) | int %}
-    <div style="margin-bottom:.6rem">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Normalized engagement score across videos this commenter posted on (likes/views). Higher = they comment on high-engagement content.">E — Engagement</span>
-        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
-          <div style="width:{{ e_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
-        </div>
-        <span style="width:32px;text-align:right;font-size:.8rem">{{ e_pct }}%</span>
-      </div>
-    </div>
+    {# ── Scored signals ──────────────────────────────────────────── #}
+    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.4rem;margin-top:.2rem">Scored</div>
 
-    {# C — Channel spread #}
-    {% set c_pct = (score.channel_spread_score * 100) | int %}
-    <div style="margin-bottom:.6rem">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="How many distinct channels this commenter is active on. Wider spread = more likely a genuine community member, not a single-channel fan.">C — Channel spread</span>
-        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
-          <div style="width:{{ c_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
-        </div>
-        <span style="width:32px;text-align:right;font-size:.8rem">{{ c_pct }}%</span>
-      </div>
-    </div>
-
-    {# L — Like ratio #}
-    {% set l_pct = (score.like_ratio_score * 100) | int %}
-    <div style="margin-bottom:.6rem">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Percentile rank of average likes per comment within this community. Higher = community tends to agree with or appreciate their comments.">L — Like ratio</span>
-        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
-          <div style="width:{{ l_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
-        </div>
-        <span style="width:32px;text-align:right;font-size:.8rem">{{ l_pct }}%</span>
-      </div>
-    </div>
-
-    {# V — Vocabulary richness #}
-    {% set v_raw = score.vocab_richness_score or 0 %}
-    {% set v_pct = (v_raw * 100) | int %}
-    {% set v_color = '#2ecc71' if v_raw >= 0.65 else ('#f39c12' if v_raw >= 0.35 else '#e74c3c') %}
-    <div style="margin-bottom:.6rem">
-      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:{{ v_color }}" title="Type-token ratio percentile: measures how varied this commenter's word choice is across all their comments. High = diverse, analytical vocabulary. Low = repetitive phrases (sycophantic style).">V — Vocabulary richness</span>
-        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
-          <div style="width:{{ v_pct }}%;height:100%;background:{{ v_color }};border-radius:3px"></div>
-        </div>
-        <span style="width:32px;text-align:right;font-size:.8rem;color:{{ v_color }}">{{ v_pct }}%</span>
-      </div>
-      <div style="padding-left:140px;font-size:.75rem;color:var(--muted);line-height:1.3">
-        Algorithmic: type-token ratio across all comments
-        {% if v_raw >= 0.65 %} — varied, diverse vocabulary{% elif v_raw >= 0.35 %} — moderate vocabulary range{% else %} — repetitive word patterns{% endif %}
-      </div>
-    </div>
-
-    {# T — Substance (LLM tone score) #}
+    {# T — Substance (LLM) — 40% of content score #}
     {% if score.llm_tone_score is not none %}
     {% set t_raw = score.llm_tone_score %}
     {% set t_pct = (t_raw * 100) | int %}
     {% set t_color = '#2ecc71' if t_raw >= 0.65 else ('#f39c12' if t_raw >= 0.35 else '#e74c3c') %}
     <div style="margin-bottom:.6rem">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:{{ t_color }}" title="AI-assessed score combining constructiveness (does it add facts/questions/nuance?) and analytical depth (does it engage with specifics?). 0 = pure sycophancy or complaints. 1 = highly analytical with original perspective.">T — Substance (LLM)</span>
+        <span style="width:140px;font-size:.8rem;color:{{ t_color }}" title="AI-assessed constructiveness + analytical depth. 40% of content score.">T — Substance <span style="font-weight:400;font-size:.72rem">(40%)</span></span>
         <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
           <div style="width:{{ t_pct }}%;height:100%;background:{{ t_color }};border-radius:3px"></div>
         </div>
@@ -106,14 +54,41 @@
     </div>
     {% endif %}
 
-    {# D — Defensiveness & Bragging #}
+    {# Len — Comment length — 35% (with LLM) or 60% (without) #}
+    {% set len_raw = score.avg_length_score or 0 %}
+    {% set len_pct = (len_raw * 100) | int %}
+    {% set len_weight = "35%" if score.llm_tone_score is not none else "60%" %}
+    <div style="margin-bottom:.6rem">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
+        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Comment length score (trapezoid: peak at 50–300 chars). {{ len_weight }} of content score.">Len — Length <span style="font-weight:400;font-size:.72rem">({{ len_weight }})</span></span>
+        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+          <div style="width:{{ len_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
+        </div>
+        <span style="width:32px;text-align:right;font-size:.8rem">{{ len_pct }}%</span>
+      </div>
+    </div>
+
+    {# LRat — Like ratio — 25% (with LLM) or 40% (without) #}
+    {% set l_pct = (score.like_ratio_score * 100) | int %}
+    {% set l_weight = "25%" if score.llm_tone_score is not none else "40%" %}
+    <div style="margin-bottom:.6rem">
+      <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
+        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Percentile rank of average likes per comment within this community. {{ l_weight }} of content score.">LRat — Like ratio <span style="font-weight:400;font-size:.72rem">({{ l_weight }})</span></span>
+        <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+          <div style="width:{{ l_pct }}%;height:100%;background:var(--accent);border-radius:3px"></div>
+        </div>
+        <span style="width:32px;text-align:right;font-size:.8rem">{{ l_pct }}%</span>
+      </div>
+    </div>
+
+    {# D — Defensiveness — 50% of final score (creators only) #}
     {% if score.llm_defensiveness_score is not none %}
     {% set def_raw = score.llm_defensiveness_score %}
     {% set def_pct = (def_raw * 100) | int %}
     {% set def_color = '#e74c3c' if def_raw >= 0.6 else ('#f39c12' if def_raw >= 0.3 else '#2ecc71') %}
     <div style="margin-bottom:.6rem">
       <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.15rem">
-        <span style="width:140px;font-size:.8rem;color:{{ def_color }}" title="Detects defensive reactions to criticism (dismissal, passive-aggression, spiritual shields) and unprompted self-promotion (credential-dropping, follower mentions, spiritual one-upmanship). Lower is better.">D — Defensiveness</span>
+        <span style="width:140px;font-size:.8rem;color:{{ def_color }}" title="Detects defensive reactions to criticism and unprompted self-promotion. Counts as 50% of the final score (lower = better).">D — Defensiveness <span style="font-weight:400;font-size:.72rem">(50% final)</span></span>
         <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
           <div style="width:{{ def_pct }}%;height:100%;background:{{ def_color }};border-radius:3px"></div>
         </div>
@@ -126,6 +101,34 @@
       {% endif %}
     </div>
     {% endif %}
+
+    {# ── Info only (not scored) ──────────────────────────────────── #}
+    <div style="font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:.4rem;margin-top:.6rem">Info only — not scored</div>
+
+    {# E — Engagement #}
+    {% set e_pct = (score.avg_engagement_norm * 100) | int %}
+    <div style="margin-bottom:.4rem">
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Normalized engagement across videos (likes/views). Displayed for context only.">E — Engagement</span>
+        <div style="flex:1;background:var(--border);border-radius:3px;height:4px;overflow:hidden">
+          <div style="width:{{ e_pct }}%;height:100%;background:var(--border);filter:brightness(2);border-radius:3px"></div>
+        </div>
+        <span style="width:32px;text-align:right;font-size:.8rem;color:var(--muted)">{{ e_pct }}%</span>
+      </div>
+    </div>
+
+    {# V — Vocabulary richness #}
+    {% set v_raw = score.vocab_richness_score or 0 %}
+    {% set v_pct = (v_raw * 100) | int %}
+    <div style="margin-bottom:.2rem">
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span style="width:140px;font-size:.8rem;color:var(--muted)" title="Type-token ratio percentile: diversity of word choice. Displayed for context only.">V — Vocabulary</span>
+        <div style="flex:1;background:var(--border);border-radius:3px;height:4px;overflow:hidden">
+          <div style="width:{{ v_pct }}%;height:100%;background:var(--border);filter:brightness(2);border-radius:3px"></div>
+        </div>
+        <span style="width:32px;text-align:right;font-size:.8rem;color:var(--muted)">{{ v_pct }}%</span>
+      </div>
+    </div>
 
   </div>
 
