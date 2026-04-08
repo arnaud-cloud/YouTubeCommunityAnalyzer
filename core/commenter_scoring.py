@@ -1418,7 +1418,7 @@ def score_community_creators_detailed(conn, community_id: int,
     total_scored = 0
     for i, row in enumerate(rows):
         if progress_callback:
-            progress_callback(i, len(rows) * 2)  # *2: tone + defensiveness passes
+            progress_callback(i, len(rows))
         success = _score_creator_detailed(
             conn, community_id,
             row["author_channel_id"], row["author_name"],
