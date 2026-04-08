@@ -132,11 +132,11 @@
     🛡️ Defensiveness Score
     <span style="font-size:1.4rem;margin-left:.75rem;font-weight:700">{{ def_pct }}%</span>
     <span style="font-weight:400;font-size:.8rem;color:var(--muted);margin-left:.5rem">
-      {% if score.llm_defensiveness_score < 0.2 %}None detected
-      {% elif score.llm_defensiveness_score < 0.4 %}Very subtle
-      {% elif score.llm_defensiveness_score < 0.6 %}One clear instance
-      {% elif score.llm_defensiveness_score < 0.8 %}Recurring pattern
-      {% else %}Systematic{% endif %}
+      {% if score.llm_defensiveness_score < 0.1 %}None detected
+      {% elif score.llm_defensiveness_score < 0.5 %}Subtle instances only
+      {% elif score.llm_defensiveness_score < 0.7 %}One clear instance
+      {% elif score.llm_defensiveness_score < 0.9 %}Two clear instances
+      {% else %}Three or more clear instances{% endif %}
     </span>
   </div>
   <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden;margin-bottom:.75rem">

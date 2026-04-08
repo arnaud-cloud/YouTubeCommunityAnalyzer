@@ -324,19 +324,22 @@ Look specifically for:
 - Shutting down dialogue with authority claims rather than engaging the substance
 - Needing the last word, especially after being challenged
 
-IMPORTANT CALIBRATION — even one instance already matters:
-  0.0 = no defensiveness detected — genuinely open, engages with criticism gracefully
-  0.2 = one very subtle instance — a slightly dismissive phrase, possibly accidental
-  0.4 = one clear instance — unmistakable defensiveness in at least one exchange
-  0.6 = multiple instances — recurring pattern that contradicts the "unshakeable" claim
-  0.8 = systematic — routinely defensive or dismissive when challenged
-  1.0 = extreme — aggressive, condescending, or using spiritual bypass to deflect all challenge
+SCALE — apply precisely:
+  0.0        = no defensiveness found. DEFAULT: use this when you cannot cite a specific example.
+  0.2 – 0.49 = subtle instances only — ambiguous, no clear case. More subtle instances → higher in this range.
+  0.5        = one clear, unmistakable instance (base score; additional subtle cases push slightly above 0.5)
+  0.65       = one clear instance + accumulation of subtle ones
+  0.75       = two clear instances (subtle cases also add up within this range)
+  1.0        = three or more clear instances
 
-Note: Polite disagreement is NOT defensiveness. Only score true defensiveness, not general negativity.
-In your reason, cite concrete behavior observed in the comments.
+RULES:
+- If you cannot point to a specific comment or exchange as evidence, score 0.0.
+- "Clear instance" = unmistakable defensiveness that a neutral observer would agree on.
+- "Subtle instance" = could be interpreted charitably, but leans defensive.
+- Polite disagreement, explaining oneself, or correcting misinformation is NOT defensiveness.
 
 Respond with JSON only:
-{"defensiveness": 0.4, "instances": 2, "reason": "one sentence citing specific behavior patterns"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "cite specific evidence, or state that none was found"}"""
 
 _DEFENSIVENESS_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
@@ -354,19 +357,22 @@ Recherchez spécifiquement :
 - Fermer le dialogue par des affirmations d'autorité plutôt qu'en s'engageant sur le fond
 - Avoir besoin d'avoir le dernier mot, surtout après avoir été challengé
 
-CALIBRATION IMPORTANTE — même une seule instance compte :
-  0,0 = aucune défensivité détectée — genuinement ouvert, s'engage avec les critiques avec grâce
-  0,2 = une instance très subtile — une formulation légèrement dismissive, peut-être accidentelle
-  0,4 = une instance claire — défensivité indiscutable dans au moins un échange
-  0,6 = plusieurs instances — schéma récurrent qui contredit la prétention à l'imperturbabilité
-  0,8 = systématique — régulièrement défensif ou dismissif face aux défis
-  1,0 = extrême — agressif, condescendant, ou déviant spirituellement tout défi
+ÉCHELLE — à appliquer avec précision :
+  0,0         = aucune défensivité — VALEUR PAR DÉFAUT : utilisez-la si vous ne pouvez pas citer d'exemple concret.
+  0,2 – 0,49  = instances subtiles uniquement — ambiguës, aucun cas clair. Plus d'instances subtiles → score plus haut dans cette plage.
+  0,5         = un cas clair et indiscutable (score de base ; des cas subtils supplémentaires poussent légèrement au-dessus de 0,5)
+  0,65        = un cas clair + accumulation d'instances subtiles
+  0,75        = deux cas clairs (les cas subtils s'accumulent aussi dans cette plage)
+  1,0         = trois cas clairs ou plus
 
-Remarque : Un désaccord poli standard n'est PAS de la défensivité. Évaluez uniquement la défensivité.
-Dans votre justification, citez des comportements concrets observés dans les commentaires.
+RÈGLES :
+- Si vous ne pouvez pas pointer un commentaire ou échange précis comme preuve, notez 0,0.
+- "Cas clair" = défensivité indiscutable qu'un observateur neutre reconnaîtrait.
+- "Instance subtile" = pourrait être interprétée charitablement, mais penche vers la défensivité.
+- Un désaccord poli, se justifier ou corriger une erreur n'est PAS de la défensivité.
 
 Répondez uniquement en JSON :
-{"defensiveness": 0.4, "instances": 2, "reason": "une phrase citant des comportements spécifiques"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "citez des preuves concrètes, ou indiquez qu'aucune n'a été trouvée"}"""
 
 _DEFENSIVENESS_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
@@ -384,19 +390,22 @@ Busca específicamente:
 - Cerrar el diálogo con afirmaciones de autoridad en lugar de abordar el fondo
 - Necesitar tener la última palabra, especialmente tras ser desafiados
 
-CALIBRACIÓN IMPORTANTE — incluso una sola instancia importa:
-  0,0 = no se detecta defensividad — genuinamente abierto, responde a las críticas con gracia
-  0,2 = una instancia muy sutil — una frase ligeramente desestimadora, posiblemente accidental
-  0,4 = una instancia clara — defensividad inconfundible en al menos un intercambio
-  0,6 = múltiples instancias — patrón recurrente que contradice la pretensión de ecuanimidad
-  0,8 = sistemático — habitualmente defensivo o desestimador cuando se le desafía
-  1,0 = extremo — agresivo, condescendiente, o usando bypass espiritual ante todo desafío
+ESCALA — aplicar con precisión:
+  0,0        = sin defensividad. VALOR POR DEFECTO: úsalo cuando no puedas citar un ejemplo concreto.
+  0,2 – 0,49 = instancias sutiles únicamente — ambiguas, sin caso claro. Más instancias sutiles → más alto en este rango.
+  0,5        = una instancia clara e inconfundible (puntuación base; casos sutiles adicionales empujan ligeramente por encima de 0,5)
+  0,65       = una instancia clara + acumulación de casos sutiles
+  0,75       = dos instancias claras (los casos sutiles también se acumulan en este rango)
+  1,0        = tres o más instancias claras
 
-Nota: El desacuerdo educado NO es defensividad. Evalúa solo la defensividad real.
-En tu justificación, cita comportamientos concretos observados en los comentarios.
+REGLAS:
+- Si no puedes señalar un comentario o intercambio específico como prueba, puntúa 0,0.
+- "Instancia clara" = defensividad inconfundible que un observador neutral reconocería.
+- "Instancia sutil" = podría interpretarse favorablemente, pero se inclina hacia la defensividad.
+- El desacuerdo educado, explicarse o corregir información errónea NO es defensividad.
 
 Responde únicamente con JSON:
-{"defensiveness": 0.4, "instances": 2, "reason": "una frase citando comportamientos específicos"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "cita evidencia específica, o indica que no se encontró ninguna"}"""
 
 _DEFENSIVENESS_PROMPTS = {
     "french": _DEFENSIVENESS_PROMPT_FR,
