@@ -168,16 +168,22 @@
 <div style="overflow-x:auto">
 <table style="width:100%;border-collapse:collapse;font-size:.9rem">
   <thead>
-    <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.82rem;text-transform:uppercase;letter-spacing:.05em">
+    <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">
       <th style="padding:.4rem .5rem;width:2rem">#</th>
       <th style="padding:.4rem .5rem">Name</th>
       <th style="padding:.4rem .5rem;width:3.5rem;text-align:center">Tier</th>
-      <th style="padding:.4rem .5rem;min-width:120px">Score</th>
-      <th style="padding:.4rem .5rem;text-align:right">Ch.</th>
-      <th style="padding:.4rem .5rem;text-align:right">Cmts</th>
-      <th style="padding:.4rem .5rem;text-align:right">Likes</th>
-      <th style="padding:.4rem .5rem;text-align:right">Rep.%</th>
-      <th style="padding:.4rem .5rem;color:var(--muted);font-size:.75rem">E · C · L · F · V · T · D</th>
+      <th style="padding:.4rem .5rem;min-width:110px">Score</th>
+      <th style="padding:.4rem .4rem;text-align:right">Ch.</th>
+      <th style="padding:.4rem .4rem;text-align:right">Cmts</th>
+      <th style="padding:.4rem .4rem;text-align:right">Likes</th>
+      <th style="padding:.4rem .4rem;text-align:right">Rep%</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Engagement — normalized engagement (likes/views) across videos this commenter posted on">Eng</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Channel Spread — how many distinct channels this commenter is active on">Sprd</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Like Ratio — percentile rank of average likes per comment within this community">LRat</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Factual Anchors — share of comments containing numbers, specific names, or verifiable references">Fact</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Vocabulary Richness — type-token ratio percentile: how varied their word choice is. High = diverse/analytical. Low = repetitive/sycophantic.">Vcb</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Substance (LLM) — AI-assessed constructiveness + analytical depth. 0 = pure sycophancy, 1 = highly analytical.">Sub</th>
+      <th style="padding:.4rem .4rem;text-align:right" title="Defensiveness &amp; Bragging (LLM) — detects defensive reactions to criticism and unprompted self-promotion. Lower is better.">Def</th>
     </tr>
   </thead>
   <tbody>
@@ -187,12 +193,12 @@
     {% set pct = (c.quality_score * 100) | int %}
     <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
       <td style="padding:.4rem .5rem;color:var(--muted)">{{ rank }}</td>
-      <td style="padding:.4rem .5rem;font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
+      <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
         <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=c.author_channel_id) }}" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
           {{ c.author_name or c.author_channel_id }}
         </a>
         {% if c.author_channel_id in channel_owner_ids %}
-        <span style="font-size:.65rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .35em;margin-left:.25em;vertical-align:middle">creator</span>
+        <span style="font-size:.65rem;font-weight:600;background:#7c4dff22;color:#9e7bff;border:1px solid #7c4dff44;border-radius:3px;padding:.1em .3em;margin-left:.2em;vertical-align:middle">cr.</span>
         {% endif %}
       </td>
       <td style="padding:.4rem .5rem;text-align:center">
@@ -206,44 +212,39 @@
           <span style="font-size:.8rem;color:{{ tier_color }};min-width:2.2em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
         </div>
       </td>
-      <td style="padding:.4rem .5rem;text-align:right">{{ c.channel_count }}</td>
-      <td style="padding:.4rem .5rem;text-align:right">{{ c.comment_count }}</td>
-      <td style="padding:.4rem .5rem;text-align:right">{{ c.total_likes }}</td>
-      <td style="padding:.4rem .5rem;text-align:right;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
+      <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.channel_count }}</td>
+      <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.comment_count }}</td>
+      <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.total_likes }}</td>
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{% if c.reply_ratio and c.reply_ratio > 0.6 %}#e74c3c{% elif c.reply_ratio and c.reply_ratio > 0.4 %}#f39c12{% else %}var(--muted){% endif %}">
         {{ ((c.reply_ratio or 0) * 100) | int }}%
       </td>
-      <td style="padding:.4rem .5rem">
-        <div style="display:flex;gap:.2rem;align-items:center;font-size:.73rem;white-space:nowrap">
-          {# E — Engagement: normalized like+view engagement across all commented videos #}
-          <span style="color:var(--muted)" title="E — Engagement: normalized engagement score across videos this commenter posted on (likes/views). Higher = they comment on high-engagement content.">E:{{ "%.0f"|format((c.avg_engagement_norm or 0) * 100) }}%</span>
-          <span style="color:var(--border)">·</span>
-          {# C — Channel spread: how many distinct channels they comment on #}
-          <span style="color:var(--muted)" title="C — Channel spread: how many distinct channels this commenter is active on. Wider spread = more likely a genuine community member, not a single-channel fan.">C:{{ "%.0f"|format((c.channel_spread_score or 0) * 100) }}%</span>
-          <span style="color:var(--border)">·</span>
-          {# L — Like ratio: percentile rank of average likes per comment #}
-          <span style="color:var(--muted)" title="L — Like ratio: percentile rank of average likes per comment within this community. Higher = community tends to agree with or appreciate their comments.">L:{{ "%.0f"|format((c.like_ratio_score or 0) * 100) }}%</span>
-          <span style="color:var(--border)">·</span>
-          {# F — Factual anchors: ratio of comments containing numbers, names, or citations #}
-          <span style="color:var(--muted)" title="F — Factual anchors: share of comments that contain numbers, specific names, or verifiable references. Higher = more evidence-based commenting style.">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
-          <span style="color:var(--border)">·</span>
-          {# V — Vocabulary richness: type-token ratio percentile (unique/total words) #}
-          {% set v_pct = (c.vocab_richness_score or 0) %}
-          {% set v_color = '#2ecc71' if v_pct >= 0.65 else ('#f39c12' if v_pct >= 0.35 else '#e74c3c') %}
-          <span style="color:{{ v_color }};font-weight:500" title="V — Vocabulary richness: type-token ratio percentile. Measures how varied this commenter's word choice is across all their comments. High = diverse, analytical vocabulary. Low = repetitive phrases (sycophantic style).">V:{{ "%.0f"|format(v_pct * 100) }}%</span>
-          {# T — Substance: LLM-assessed quality (constructiveness + analytical depth) #}
-          {% if c.llm_tone_score is not none %}
-          <span style="color:var(--border)">·</span>
-          {% set t_color = '#2ecc71' if c.llm_tone_score >= 0.65 else ('#f39c12' if c.llm_tone_score >= 0.35 else '#e74c3c') %}
-          <span style="color:{{ t_color }};font-weight:500" title="T — Substance (LLM): AI-assessed score combining constructiveness (does it add facts/questions/nuance?) and analytical depth (does it engage with specifics?). Scored 0–1 by {{ c.llm_tone_backend }}/{{ c.llm_tone_model }}.&#10;&#10;Assessment: {{ c.llm_tone_reason or 'no detail' }}">T:{{ "%.0f"|format(c.llm_tone_score * 100) }}%</span>
-          {% endif %}
-          {# D — Defensiveness & Bragging: LLM-assessed creator behavior #}
-          {% if c.llm_defensiveness_score is not none %}
-          <span style="color:var(--border)">·</span>
-          {% set def_color = '#2ecc71' if c.llm_defensiveness_score < 0.3 else ('#f39c12' if c.llm_defensiveness_score < 0.6 else '#e74c3c') %}
-          <span style="color:{{ def_color }};font-weight:500" title="D — Defensiveness &amp; Bragging (LLM): detects defensive reactions to criticism (dismissal, passive-aggression, spiritual shields) and unprompted self-promotion (credential-dropping, follower count mentions, spiritual one-upmanship). Lower is better.&#10;&#10;Assessment: {{ c.llm_defensiveness_reason or 'no detail' }}">D:{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</span>
-          {% endif %}
-        </div>
-      </td>
+      {# Algorithmic metrics — all color-coded green ≥65%, orange ≥35%, red <35% #}
+      {% set eng = c.avg_engagement_norm or 0 %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if eng >= 0.65 else ('#f39c12' if eng >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(eng * 100) }}%</td>
+      {% set sprd = c.channel_spread_score or 0 %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if sprd >= 0.65 else ('#f39c12' if sprd >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(sprd * 100) }}%</td>
+      {% set lrat = c.like_ratio_score or 0 %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if lrat >= 0.65 else ('#f39c12' if lrat >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(lrat * 100) }}%</td>
+      {% set fact = c.factual_anchor_score or 0 %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ '#2ecc71' if fact >= 0.65 else ('#f39c12' if fact >= 0.35 else '#e74c3c') }}">{{ "%.0f"|format(fact * 100) }}%</td>
+      {# Vcb — color-coded #}
+      {% set v_raw = c.vocab_richness_score or 0 %}
+      {% set v_color = '#2ecc71' if v_raw >= 0.65 else ('#f39c12' if v_raw >= 0.35 else '#e74c3c') %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ v_color }};font-weight:500">{{ "%.0f"|format(v_raw * 100) }}%</td>
+      {# Sub — LLM substance, color-coded, reason in tooltip #}
+      {% if c.llm_tone_score is not none %}
+      {% set t_color = '#2ecc71' if c.llm_tone_score >= 0.65 else ('#f39c12' if c.llm_tone_score >= 0.35 else '#e74c3c') %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ t_color }};font-weight:500" title="{{ c.llm_tone_reason or '' }}">{{ "%.0f"|format(c.llm_tone_score * 100) }}%</td>
+      {% else %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+      {% endif %}
+      {# Def — LLM defensiveness, color-coded (inverted), reason in tooltip #}
+      {% if c.llm_defensiveness_score is not none %}
+      {% set def_color = '#2ecc71' if c.llm_defensiveness_score < 0.3 else ('#f39c12' if c.llm_defensiveness_score < 0.6 else '#e74c3c') %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:{{ def_color }};font-weight:500" title="{{ c.llm_defensiveness_reason or '' }}">{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</td>
+      {% else %}
+      <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+      {% endif %}
     </tr>
   {% endfor %}
   </tbody>
