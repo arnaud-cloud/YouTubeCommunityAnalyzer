@@ -161,14 +161,17 @@
     {% endif %}
   </form>
 
-  {# ── Percentile color toggle (client-side) ───────────────────── #}
+  {# ── Percentile color toggle + greenness sort (client-side) ─────── #}
   <div style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
     <span style="font-size:.82rem;color:var(--muted)">Color:</span>
     <div style="display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden">
-      <button id="cm-abs"  onclick="setColorMode('abs')" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff"       title="Absolute thresholds: ≥65% green, ≥35% orange, else red">Abs</button>
-      <button id="cm-3"    onclick="setColorMode('3')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="Top ⅓ / middle ⅓ / bottom ⅓ of this page">3 bands</button>
-      <button id="cm-5"    onclick="setColorMode('5')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="5 equal percentile bands across this page">5 bands</button>
+      <button id="cm-abs" onclick="setColorMode('abs')" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff"        title="Absolute thresholds: ≥65% green, ≥35% orange, else red">Abs</button>
+      <button id="cm-3"   onclick="setColorMode('3')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="Top ⅓ / middle ⅓ / bottom ⅓ of this page">3 bands</button>
+      <button id="cm-5"   onclick="setColorMode('5')"   style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="5 equal percentile bands across this page">5 bands</button>
     </div>
+    <button id="cm-green" onclick="toggleGreenSort()"
+            style="padding:.25rem .65rem;font-size:.78rem;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:var(--muted);margin-left:.25rem"
+            title="Sort by overall greenness — composite of all metrics (click to cycle: greenest first ↓ · reddest first ↑ · off)">Greenness ↕</button>
   </div>
 
   <span style="font-size:.85rem;color:var(--muted);margin-left:auto">{{ total }} commenter{{ 's' if total != 1 }}</span>
@@ -177,7 +180,7 @@
 {# ── Table ──────────────────────────────────────────────────────────────── #}
 {% if commenters %}
 <div style="overflow-x:auto">
-<table style="width:100%;border-collapse:collapse;font-size:.9rem">
+<table id="commenter-table" style="width:100%;border-collapse:collapse;font-size:.9rem">
   <thead>
     <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">
       <th style="padding:.4rem .5rem;width:2rem">#</th>
@@ -203,7 +206,7 @@
     {% set tier_color = {'A': '#2ecc71', 'B': '#a8e6cf', 'C': '#f39c12', 'D': '#e74c3c'}.get(c.tier, '#9090b0') %}
     {% set pct = (c.quality_score * 100) | int %}
     <tr style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
-      <td style="padding:.4rem .5rem;color:var(--muted)">{{ rank }}</td>
+      <td style="padding:.4rem .5rem;color:var(--muted)" data-rank="{{ rank }}">{{ rank }}</td>
       <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.author_name }}">
         <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=c.author_channel_id) }}" style="color:inherit;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
           {{ c.author_name or c.author_channel_id }}
@@ -258,74 +261,165 @@
 
 <script>
 (function () {
-  // Cols that are inverted (low = good = green)
-  const INV = new Set(['def']);
+  const INV = new Set(['def']);  // inverted: low = good
+  const C3  = ['#e74c3c', '#f39c12', '#2ecc71'];
+  const C5  = ['#e74c3c', '#e67e22', '#8899aa', '#a8e6cf', '#2ecc71'];
 
-  // Color palettes: index 0 = worst, last = best
-  const C3 = ['#e74c3c', '#f39c12', '#2ecc71'];
-  const C5 = ['#e74c3c', '#e67e22', '#8899aa', '#a8e6cf', '#2ecc71'];
+  let currentColorMode = 'abs';
+  let greenSortDir     = null;   // null | 'green' | 'red'
 
+  // ── helpers ────────────────────────────────────────────────────────────
   function absColor(col, val) {
-    if (col === 'def') {
-      return val < 0.3 ? '#2ecc71' : val < 0.6 ? '#f39c12' : '#e74c3c';
-    }
+    if (col === 'def') return val < 0.3 ? '#2ecc71' : val < 0.6 ? '#f39c12' : '#e74c3c';
     return val >= 0.65 ? '#2ecc71' : val >= 0.35 ? '#f39c12' : '#e74c3c';
   }
 
-  function percentileRank(sortedVals, v) {
-    // fraction of values strictly below v
-    let lo = 0, hi = sortedVals.length;
-    while (lo < hi) { const m = (lo + hi) >> 1; if (sortedVals[m] < v) lo = m + 1; else hi = m; }
-    return lo / sortedVals.length;
+  function percentileRank(sorted, v) {
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) lo = m + 1; else hi = m; }
+    return lo / sorted.length;
   }
 
   function bandColor(palette, pct) {
-    const i = Math.min(Math.floor(pct * palette.length), palette.length - 1);
-    return palette[i];
+    return palette[Math.min(Math.floor(pct * palette.length), palette.length - 1)];
   }
 
-  window.setColorMode = function (mode) {
-    // Update button styles
-    ['abs', '3', '5'].forEach(m => {
-      const btn = document.getElementById('cm-' + m);
-      if (btn) { btn.style.background = m === mode ? 'var(--accent)' : 'var(--surface)'; btn.style.color = m === mode ? '#fff' : 'var(--muted)'; }
-    });
-
-    const cells = Array.from(document.querySelectorAll('td.mc[data-col]'));
-
-    if (mode === 'abs') {
-      cells.forEach(td => {
-        const v = td.dataset.val;
-        if (v === '' || v === undefined) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
-        td.style.color = absColor(td.dataset.col, parseFloat(v));
-        td.style.fontWeight = '500';
-      });
-      return;
-    }
-
-    // Group by column, build sorted value arrays (nulls excluded)
+  // Build sorted-values index for percentile mode
+  function buildByCol(cells) {
     const byCol = {};
     cells.forEach(td => {
-      const col = td.dataset.col;
       const v = td.dataset.val;
-      if (v === '' || v === undefined) return;
-      (byCol[col] = byCol[col] || []).push(parseFloat(v));
+      if (v === '' || v == null) return;
+      (byCol[td.dataset.col] = byCol[td.dataset.col] || []).push(parseFloat(v));
     });
     Object.values(byCol).forEach(a => a.sort((x, y) => x - y));
+    return byCol;
+  }
 
-    const palette = mode === '3' ? C3 : C5;
+  // Quality score for one metric cell: 0 (worst) → 1 (best)
+  function cellScore(td, byCol) {
+    const v = td.dataset.val;
+    if (v === '' || v == null) return null;
+    const col = td.dataset.col;
+    const fv  = parseFloat(v);
+    let q;
+    if (currentColorMode === 'abs') {
+      q = INV.has(col) ? 1 - fv : fv;
+    } else {
+      const sorted = byCol[col] || [];
+      let pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+      q = INV.has(col) ? 1 - pct : pct;
+    }
+    return q;
+  }
+
+  // Composite greenness score for a row
+  function rowScore(tr, byCol) {
+    const cells = tr.querySelectorAll('td.mc[data-col]');
+    let sum = 0, n = 0;
+    cells.forEach(td => {
+      const q = cellScore(td, byCol);
+      if (q !== null) { sum += q; n++; }
+    });
+    return n ? sum / n : 0;
+  }
+
+  // ── color application ───────────────────────────────────────────────────
+  function applyColors() {
+    const cells  = Array.from(document.querySelectorAll('td.mc[data-col]'));
+    const byCol  = currentColorMode !== 'abs' ? buildByCol(cells) : null;
+    const palette = currentColorMode === '3' ? C3 : C5;
 
     cells.forEach(td => {
       const v = td.dataset.val;
-      if (v === '' || v === undefined) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
+      if (v === '' || v == null) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
       const col = td.dataset.col;
-      const sorted = byCol[col] || [];
-      if (sorted.length === 0) return;
-      let pct = percentileRank(sorted, parseFloat(v));
-      if (INV.has(col)) pct = 1 - pct;
-      td.style.color = bandColor(palette, pct);
+      const fv  = parseFloat(v);
+      let color;
+      if (currentColorMode === 'abs') {
+        color = absColor(col, fv);
+      } else {
+        const sorted = byCol[col] || [];
+        let pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+        if (INV.has(col)) pct = 1 - pct;
+        color = bandColor(palette, pct);
+      }
+      td.style.color = color;
       td.style.fontWeight = '500';
     });
+  }
+
+  // ── green sort ─────────────────────────────────────────────────────────
+  function applyGreenSort() {
+    if (!greenSortDir) return;
+    const tbody  = document.querySelector('#commenter-table tbody');
+    if (!tbody) return;
+    const cells  = Array.from(document.querySelectorAll('td.mc[data-col]'));
+    const byCol  = currentColorMode !== 'abs' ? buildByCol(cells) : null;
+    const rows   = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const sa = rowScore(a, byCol), sb = rowScore(b, byCol);
+      return greenSortDir === 'desc' ? sb - sa : sa - sb;
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    // Re-number rank column (first <td>) to reflect new order
+    rows.forEach((r, i) => {
+      const rank = r.querySelector('td:first-child');
+      if (rank) rank.textContent = i + 1;
+    });
+  }
+
+  function updateGreenBtn() {
+    const btn = document.getElementById('cm-green');
+    if (!btn) return;
+    if (!greenSortDir) {
+      btn.textContent = 'Greenness ↕';
+      btn.style.background = 'var(--surface)'; btn.style.color = 'var(--muted)'; btn.style.borderColor = 'var(--border)';
+    } else if (greenSortDir === 'desc') {
+      btn.textContent = 'Greenness ↓';
+      btn.style.background = '#2ecc7122'; btn.style.color = '#2ecc71'; btn.style.borderColor = '#2ecc7166';
+    } else {
+      btn.textContent = 'Greenness ↑';
+      btn.style.background = '#e74c3c22'; btn.style.color = '#e74c3c'; btn.style.borderColor = '#e74c3c66';
+    }
+  }
+
+  // ── public API ──────────────────────────────────────────────────────────
+  window.setColorMode = function (mode) {
+    currentColorMode = mode;
+    ['abs', '3', '5'].forEach(m => {
+      const btn = document.getElementById('cm-' + m);
+      if (!btn) return;
+      btn.style.background = m === mode ? 'var(--accent)' : 'var(--surface)';
+      btn.style.color      = m === mode ? '#fff'         : 'var(--muted)';
+    });
+    applyColors();
+    if (greenSortDir) applyGreenSort();  // re-sort with new scores
+  };
+
+  window.toggleGreenSort = function () {
+    // Cycle: null → desc (greenest first) → asc (reddest first) → null
+    greenSortDir = greenSortDir === null ? 'desc' : greenSortDir === 'desc' ? 'asc' : null;
+    updateGreenBtn();
+    if (greenSortDir) {
+      applyGreenSort();
+    } else {
+      // Restore server-side order via data-rank
+      const tbody = document.querySelector('#commenter-table tbody');
+      if (tbody) {
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+          const ra = parseInt(a.querySelector('td[data-rank]')?.dataset.rank || 0);
+          const rb = parseInt(b.querySelector('td[data-rank]')?.dataset.rank || 0);
+          return ra - rb;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+        rows.forEach(r => {
+          const cell = r.querySelector('td[data-rank]');
+          if (cell) cell.textContent = cell.dataset.rank;
+        });
+      }
+    }
   };
 
   // Apply absolute coloring on load
