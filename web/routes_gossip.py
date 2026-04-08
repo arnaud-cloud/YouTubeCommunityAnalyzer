@@ -662,7 +662,7 @@ def commenters(community_id):
     tier_filter = request.args.get("tier", "")
     sort_by = request.args.get("sort", "quality_score")
     creators_only = request.args.get("creators_only", "") == "1"
-    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes", "reply_ratio"}:
+    if sort_by not in {"quality_score", "channel_count", "comment_count", "total_likes", "reply_ratio", "llm_tone_score"}:
         sort_by = "quality_score"
 
     # Fetch channel owner IDs for this community
