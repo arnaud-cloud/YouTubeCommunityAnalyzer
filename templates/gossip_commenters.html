@@ -192,7 +192,6 @@
       <th style="padding:.4rem .4rem;text-align:right">Likes</th>
       <th style="padding:.4rem .4rem;text-align:right">Rep%</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Engagement — normalized engagement (likes/views) across videos this commenter posted on">Eng</th>
-      <th style="padding:.4rem .4rem;text-align:right" title="Channel Spread — how many distinct channels this commenter is active on">Sprd</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Like Ratio — percentile rank of average likes per comment within this community">LRat</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Factual Anchors — share of comments containing numbers, specific names, or verifiable references">Fact</th>
       <th style="padding:.4rem .4rem;text-align:right" title="Vocabulary Richness — type-token ratio percentile: how varied their word choice is. High = diverse/analytical. Low = repetitive/sycophantic.">Vcb</th>
@@ -235,8 +234,6 @@
       {# Metric cells — data-col + data-val enable client-side percentile coloring #}
       {% set eng = c.avg_engagement_norm or 0 %}
       <td class="mc" data-col="eng" data-val="{{ eng }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(eng * 100) }}%</td>
-      {% set sprd = c.channel_spread_score or 0 %}
-      <td class="mc" data-col="sprd" data-val="{{ sprd }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(sprd * 100) }}%</td>
       {% set lrat = c.like_ratio_score or 0 %}
       <td class="mc" data-col="lrat" data-val="{{ lrat }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(lrat * 100) }}%</td>
       {% set fact = c.factual_anchor_score or 0 %}
