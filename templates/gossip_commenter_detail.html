@@ -129,7 +129,7 @@
 {% set def_color = '#e74c3c' if score.llm_defensiveness_score >= 0.6 else ('#f39c12' if score.llm_defensiveness_score >= 0.3 else '#2ecc71') %}
 <div style="background:var(--surface);border:1px solid {{ def_color }}44;border-radius:8px;padding:1.1rem 1.25rem;margin-bottom:1.5rem">
   <div style="font-size:.8rem;font-weight:600;margin-bottom:.75rem;color:{{ def_color }}">
-    🛡️ Defensiveness Score
+    🛡️ Defensiveness &amp; Bragging Score
     <span style="font-size:1.4rem;margin-left:.75rem;font-weight:700">{{ def_pct }}%</span>
     <span style="font-weight:400;font-size:.8rem;color:var(--muted);margin-left:.5rem">
       {% if score.llm_defensiveness_score < 0.1 %}None detected

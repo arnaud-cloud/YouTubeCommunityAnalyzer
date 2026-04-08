@@ -311,12 +311,12 @@ _CREATOR_CONSOLIDATE_PROMPTS = {
 _DEFENSIVENESS_PROMPT = """\
 IMPORTANT: Respond with JSON only. No prose, no explanations, no markdown.
 
-You are analyzing whether a YouTube creator shows defensiveness in their public comments.
+You are analyzing whether a YouTube creator shows ego-revealing behavior in their public comments.
 
 CONTEXT: This creator presents themselves as spiritually advanced — calm, non-reactive, beyond ego.
-Your job is to find where this mask slips.
+Your job is to find where this mask slips. Look for TWO types of behavior, both count equally:
 
-Look specifically for:
+DEFENSIVENESS — reacting to challenge or criticism:
 - Dismissing or belittling commenters who question, criticize, or challenge them
 - Using spiritual language as a shield ("you're not at my level", "low vibration energy", "that's your projection")
 - Passive-aggressive responses — outwardly calm but subtly cutting
@@ -324,8 +324,15 @@ Look specifically for:
 - Shutting down dialogue with authority claims rather than engaging the substance
 - Needing the last word, especially after being challenged
 
-SCALE — apply precisely:
-  0.0        = no defensiveness found. DEFAULT: use this when you cannot cite a specific example.
+BRAGGING — unsolicited self-promotion or status signalling:
+- Unprompted mentions of their own achievements, follower count, income, or influence
+- Dropping credentials or testimonials to establish superiority ("thousands of students have transformed...")
+- Comparing themselves favourably to others, implicitly or explicitly
+- Spiritual one-upmanship ("at my level of consciousness...", "after years of deep practice...")
+- Turning other people's questions or struggles into an opportunity to showcase themselves
+
+SCALE — instances of either type count toward the score:
+  0.0        = none found. DEFAULT: use this when you cannot cite a specific example.
   0.2 – 0.49 = subtle instances only — ambiguous, no clear case. More subtle instances → higher in this range.
   0.5        = one clear, unmistakable instance (base score; additional subtle cases push slightly above 0.5)
   0.65       = one clear instance + accumulation of subtle ones
@@ -334,22 +341,22 @@ SCALE — apply precisely:
 
 RULES:
 - If you cannot point to a specific comment or exchange as evidence, score 0.0.
-- "Clear instance" = unmistakable defensiveness that a neutral observer would agree on.
-- "Subtle instance" = could be interpreted charitably, but leans defensive.
-- Polite disagreement, explaining oneself, or correcting misinformation is NOT defensiveness.
+- "Clear instance" = unmistakable behavior that a neutral observer would agree on.
+- "Subtle instance" = could be interpreted charitably, but leans defensive or boastful.
+- Answering a direct question about oneself is NOT bragging. Correcting misinformation is NOT defensiveness.
 
 Respond with JSON only:
-{"defensiveness": 0.0, "instances": 0, "reason": "cite specific evidence, or state that none was found"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "cite specific evidence (defensiveness and/or bragging), or state that none was found"}"""
 
 _DEFENSIVENESS_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
 
-Vous analysez si un créateur YouTube montre de la défensivité dans ses commentaires publics.
+Vous analysez si un créateur YouTube révèle son ego dans ses commentaires publics.
 
 CONTEXTE : Ce créateur se présente comme spirituellement avancé — calme, non-réactif, au-delà de l'ego.
-Votre rôle est de trouver où ce masque se fissure.
+Votre rôle est de trouver où ce masque se fissure. Recherchez DEUX types de comportements, les deux comptent également :
 
-Recherchez spécifiquement :
+DÉFENSIVITÉ — réaction à une critique ou un défi :
 - Rejeter ou dénigrer les commentateurs qui les questionnent, critiquent ou défient
 - Utiliser le langage spirituel comme bouclier ("vous n'êtes pas à mon niveau", "basse vibration", "c'est votre projection")
 - Réponses passives-agressives — apparemment calmes mais subtilement blessantes
@@ -357,32 +364,39 @@ Recherchez spécifiquement :
 - Fermer le dialogue par des affirmations d'autorité plutôt qu'en s'engageant sur le fond
 - Avoir besoin d'avoir le dernier mot, surtout après avoir été challengé
 
-ÉCHELLE — à appliquer avec précision :
-  0,0         = aucune défensivité — VALEUR PAR DÉFAUT : utilisez-la si vous ne pouvez pas citer d'exemple concret.
-  0,2 – 0,49  = instances subtiles uniquement — ambiguës, aucun cas clair. Plus d'instances subtiles → score plus haut dans cette plage.
-  0,5         = un cas clair et indiscutable (score de base ; des cas subtils supplémentaires poussent légèrement au-dessus de 0,5)
+VANTARDISE — auto-promotion ou signalisation de statut non sollicitées :
+- Mentions non sollicitées de leurs propres réalisations, nombre d'abonnés, revenus ou influence
+- Utilisation de références ou témoignages pour établir leur supériorité ("des milliers d'étudiants ont été transformés...")
+- Se comparer favorablement aux autres, implicitement ou explicitement
+- Surenchère spirituelle ("à mon niveau de conscience...", "après des années de pratique profonde...")
+- Transformer les questions ou difficultés des autres en occasion de se mettre en valeur
+
+ÉCHELLE — les instances des deux types comptent :
+  0,0         = aucune trouvée. VALEUR PAR DÉFAUT : utilisez-la si vous ne pouvez pas citer d'exemple concret.
+  0,2 – 0,49  = instances subtiles uniquement — ambiguës, aucun cas clair. Plus d'instances → score plus haut.
+  0,5         = un cas clair et indiscutable (score de base ; des cas subtils supplémentaires poussent légèrement au-dessus)
   0,65        = un cas clair + accumulation d'instances subtiles
-  0,75        = deux cas clairs (les cas subtils s'accumulent aussi dans cette plage)
+  0,75        = deux cas clairs (les cas subtils s'accumulent aussi)
   1,0         = trois cas clairs ou plus
 
 RÈGLES :
-- Si vous ne pouvez pas pointer un commentaire ou échange précis comme preuve, notez 0,0.
-- "Cas clair" = défensivité indiscutable qu'un observateur neutre reconnaîtrait.
-- "Instance subtile" = pourrait être interprétée charitablement, mais penche vers la défensivité.
-- Un désaccord poli, se justifier ou corriger une erreur n'est PAS de la défensivité.
+- Si vous ne pouvez pas pointer un commentaire ou échange précis, notez 0,0.
+- "Cas clair" = comportement indiscutable qu'un observateur neutre reconnaîtrait.
+- "Instance subtile" = pourrait être interprétée charitablement, mais penche vers la défensivité ou la vantardise.
+- Répondre à une question directe sur soi n'est PAS de la vantardise. Corriger une erreur n'est PAS de la défensivité.
 
 Répondez uniquement en JSON :
-{"defensiveness": 0.0, "instances": 0, "reason": "citez des preuves concrètes, ou indiquez qu'aucune n'a été trouvée"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "citez des preuves concrètes (défensivité et/ou vantardise), ou indiquez qu'aucune n'a été trouvée"}"""
 
 _DEFENSIVENESS_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
 
-Estás analizando si un creador de YouTube muestra actitud defensiva en sus comentarios públicos.
+Estás analizando si un creador de YouTube revela su ego en sus comentarios públicos.
 
 CONTEXTO: Este creador se presenta como espiritualmente avanzado — tranquilo, no reactivo, más allá del ego.
-Tu trabajo es encontrar dónde se rompe esta máscara.
+Tu trabajo es encontrar dónde se rompe esta máscara. Busca DOS tipos de comportamiento, ambos cuentan por igual:
 
-Busca específicamente:
+DEFENSIVIDAD — reacción a críticas o desafíos:
 - Desestimar o menospreciar a los comentaristas que los cuestionan, critican o desafían
 - Usar el lenguaje espiritual como escudo ("no estás en mi nivel", "baja vibración", "eso es tu proyección")
 - Respuestas pasivo-agresivas — aparentemente tranquilas pero sutilmente hirientes
@@ -390,22 +404,29 @@ Busca específicamente:
 - Cerrar el diálogo con afirmaciones de autoridad en lugar de abordar el fondo
 - Necesitar tener la última palabra, especialmente tras ser desafiados
 
-ESCALA — aplicar con precisión:
-  0,0        = sin defensividad. VALOR POR DEFECTO: úsalo cuando no puedas citar un ejemplo concreto.
-  0,2 – 0,49 = instancias sutiles únicamente — ambiguas, sin caso claro. Más instancias sutiles → más alto en este rango.
-  0,5        = una instancia clara e inconfundible (puntuación base; casos sutiles adicionales empujan ligeramente por encima de 0,5)
+FANFARRONERÍA — autopromoción o señalización de estatus no solicitadas:
+- Menciones no solicitadas de sus logros, número de seguidores, ingresos o influencia
+- Uso de credenciales o testimonios para establecer superioridad ("miles de estudiantes se han transformado...")
+- Compararse favorablemente con otros, implícita o explícitamente
+- Superioridad espiritual ("a mi nivel de conciencia...", "tras años de práctica profunda...")
+- Convertir las preguntas o dificultades de otros en una oportunidad para destacarse
+
+ESCALA — las instancias de ambos tipos cuentan:
+  0,0        = ninguna encontrada. VALOR POR DEFECTO: úsalo cuando no puedas citar un ejemplo concreto.
+  0,2 – 0,49 = instancias sutiles únicamente — ambiguas, sin caso claro. Más instancias → más alto en el rango.
+  0,5        = una instancia clara e inconfundible (puntuación base; casos sutiles adicionales empujan ligeramente por encima)
   0,65       = una instancia clara + acumulación de casos sutiles
-  0,75       = dos instancias claras (los casos sutiles también se acumulan en este rango)
+  0,75       = dos instancias claras (los casos sutiles también se acumulan)
   1,0        = tres o más instancias claras
 
 REGLAS:
-- Si no puedes señalar un comentario o intercambio específico como prueba, puntúa 0,0.
-- "Instancia clara" = defensividad inconfundible que un observador neutral reconocería.
-- "Instancia sutil" = podría interpretarse favorablemente, pero se inclina hacia la defensividad.
-- El desacuerdo educado, explicarse o corregir información errónea NO es defensividad.
+- Si no puedes señalar un comentario o intercambio específico, puntúa 0,0.
+- "Instancia clara" = comportamiento inconfundible que un observador neutral reconocería.
+- "Instancia sutil" = podría interpretarse favorablemente, pero se inclina hacia la defensividad o fanfarronería.
+- Responder una pregunta directa sobre uno mismo NO es fanfarronería. Corregir información errónea NO es defensividad.
 
 Responde únicamente con JSON:
-{"defensiveness": 0.0, "instances": 0, "reason": "cita evidencia específica, o indica que no se encontró ninguna"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "cita evidencia específica (defensividad y/o fanfarronería), o indica que no se encontró ninguna"}"""
 
 _DEFENSIVENESS_PROMPTS = {
     "french": _DEFENSIVENESS_PROMPT_FR,
