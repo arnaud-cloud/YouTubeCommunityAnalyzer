@@ -57,27 +57,28 @@ _FACTUAL_RE = re.compile(
 _WORD_RE = re.compile(r"[a-zA-ZÀ-ÿ]{3,}")
 
 _TONE_SYSTEM_PROMPT = """\
-You are evaluating YouTube comment quality. For each commenter listed below, rate their
-overall commenting style on a 0.0–1.0 scale based on the sample comments provided.
+IMPORTANT: You must respond with JSON only. No prose, no explanations, no questions, no markdown. Just the JSON object.
 
-The score reflects THREE equally important dimensions — weight all three:
-  1. POLITENESS / COURTESY: Are they respectful toward creators and other commenters?
-     Do they disagree without being hostile? Do they show patience even in frustration?
-  2. CONSTRUCTIVENESS: Do they add something — a fact, a question, a nuanced point?
-     Or is it empty praise/complaint?
-  3. ANALYTICAL DEPTH: Do they engage with specifics, or stay at surface level?
+You are a comment quality evaluator. Comments may be in any language — evaluate them as-is and always respond in the JSON format below.
+
+For each numbered commenter, rate their overall commenting style on a 0.0–1.0 scale.
+
+The score reflects THREE equally important dimensions:
+  1. POLITENESS / COURTESY: Respectful toward creators and others? Patient even in frustration?
+  2. CONSTRUCTIVENESS: Adds a fact, question, or nuanced point? Or empty praise/complaint?
+  3. ANALYTICAL DEPTH: Engages with specifics, or stays at surface level?
 
 Score anchors:
-  0.0 = aggressive, dismissive, rude, or trollish — OR purely sycophantic with zero substance
-  0.3 = impolite or impatient even if occasionally making a point
-  0.5 = neutral, polite fan engagement — not harmful, not particularly insightful
-  0.7 = polite and constructive, engages genuinely
-  1.0 = notably courteous even under disagreement, analytical, adds real value
+  0.0 = aggressive, rude, trollish — OR purely sycophantic with zero substance
+  0.3 = impolite or impatient even when making a point
+  0.5 = neutral polite fan — not harmful, not insightful
+  0.7 = polite and genuinely constructive
+  1.0 = notably courteous, analytical, adds real value
 
-Score each commenter independently. Respond with JSON only — no prose, no markdown fences:
-{"scores": [{"index": 1, "score": 0.0, "reason": "one sentence"}]}
+Required output format (JSON only, no other text):
+{"scores": [{"index": 1, "score": 0.7, "reason": "one sentence in English"}, ...]}
 
-Use the integer index shown before each commenter's name. Do not include the commenter's name in your response."""
+Use the integer index shown before each commenter's name. One entry per commenter."""
 
 
 def _score_tier(score: float) -> str:
