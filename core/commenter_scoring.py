@@ -5,18 +5,27 @@ Pure algorithmic scoring from existing DB data. No LLM calls.
 Scores are per-community (relative rankings within that community's channels).
 Results cached in the commenter_scores table; consumed by Steps 2 and 3.
 
-Scoring formula (algorithmic):
+Scoring formula:
+    When llm_tone_score is available:
     quality_score = (
         avg(engagement_normalized) / 100  * 0.20   # community validation
       + channel_spread_score              * 0.20   # breadth of engagement
-      + vocab_richness_percentile         * 0.20   # varied vocabulary = analytical thinking
+      + llm_tone_score                    * 0.15   # politeness + constructiveness + depth
+      + vocab_richness_percentile         * 0.05   # varied vocabulary
       + like_ratio_percentile             * 0.10   # likes-per-comment within community
       + factual_anchor_ratio              * 0.15   # URL/date mentions
       + avg_length_score                  * 0.15   # comment thoughtfulness
     ) * (1 - reply_penalty)
 
-When llm_tone_score is available (from score_community_tone()), it replaces
-vocab_richness_percentile in the formula — it's a better signal for the same slot.
+    Without llm_tone_score (algorithmic only):
+    quality_score = (
+        avg(engagement_normalized) / 100  * 0.20
+      + channel_spread_score              * 0.20
+      + vocab_richness_percentile         * 0.20
+      + like_ratio_percentile             * 0.10
+      + factual_anchor_ratio              * 0.15
+      + avg_length_score                  * 0.15
+    ) * (1 - reply_penalty)
 
 Tiers: A >= 0.65, B >= 0.45, C >= 0.25, D < 0.25
 """
@@ -213,18 +222,27 @@ def _compute_component_scores(stats: list[dict]) -> list[dict]:
         # 7. Reply penalty (external channels only)
         reply_penalty = min(s["reply_ratio"] * 0.5, 0.3)
 
-        # Content-quality slot: use LLM tone score when available, else vocab richness
+        # Content-quality: combine T% + V% when both available, else V% alone
         llm_tone = s.get("llm_tone_score")
-        content_score = float(llm_tone) if llm_tone is not None else vocab_score
-
-        raw = (
-            eng_score      * 0.20
-            + ch_spread    * 0.20
-            + content_score * 0.20
-            + like_ratio   * 0.10
-            + factual      * 0.15
-            + length_score * 0.15
-        )
+        if llm_tone is not None:
+            raw = (
+                eng_score        * 0.20
+                + ch_spread      * 0.20
+                + float(llm_tone) * 0.15
+                + vocab_score    * 0.05
+                + like_ratio     * 0.10
+                + factual        * 0.15
+                + length_score   * 0.15
+            )
+        else:
+            raw = (
+                eng_score        * 0.20
+                + ch_spread      * 0.20
+                + vocab_score    * 0.20
+                + like_ratio     * 0.10
+                + factual        * 0.15
+                + length_score   * 0.15
+            )
         quality_score = round(min(max(raw * (1.0 - reply_penalty), 0.0), 1.0), 4)
 
         enriched.append({

@@ -46,21 +46,20 @@
     {% endfor %}
     {% if score.llm_tone_score is not none %}
     <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
-      <span style="width:110px;font-size:.8rem;color:#a8e6cf">LLM Tone</span>
+      <span style="width:110px;font-size:.8rem;color:#a8e6cf">LLM Tone (T)</span>
       <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
         <div style="width:{{ (score.llm_tone_score * 100) | int }}%;height:100%;background:#a8e6cf;border-radius:3px"></div>
       </div>
       <span style="width:32px;text-align:right;font-size:.8rem">{{ (score.llm_tone_score * 100) | int }}%</span>
     </div>
-    {% else %}
+    {% endif %}
     <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.4rem">
-      <span style="width:110px;font-size:.8rem;color:var(--muted)">Vocab richness</span>
+      <span style="width:110px;font-size:.8rem;color:var(--muted)">Vocab richness (V)</span>
       <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
         <div style="width:{{ (score.vocab_richness_score * 100) | int }}%;height:100%;background:var(--accent);border-radius:3px"></div>
       </div>
       <span style="width:32px;text-align:right;font-size:.8rem">{{ (score.vocab_richness_score * 100) | int }}%</span>
     </div>
-    {% endif %}
     {% if score.reply_ratio is not none %}
     <div style="display:flex;align-items:center;gap:.5rem;margin-top:.2rem">
       <span style="width:110px;font-size:.8rem;color:var(--muted)">Reply penalty</span>

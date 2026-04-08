@@ -208,9 +208,9 @@
           <span style="color:var(--border)">·</span>
           {% if c.llm_tone_score is not none %}
           <span title="LLM tone score — {{ c.llm_tone_reason or 'politeness + constructiveness + depth' }}" style="color:#a8e6cf">T:{{ "%.0f"|format(c.llm_tone_score * 100) }}%</span>
-          {% else %}
-          <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
+          <span style="color:var(--border)">·</span>
           {% endif %}
+          <span title="Vocabulary richness (type-token ratio percentile){% if c.llm_tone_score is not none %} — combined with T% in score{% endif %}">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
         </div>
       </td>
     </tr>
