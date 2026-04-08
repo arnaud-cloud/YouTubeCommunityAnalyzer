@@ -455,8 +455,16 @@ def score_community_tone(conn, community_id: int,
             log.warning(f"commenter_scoring: tone batch failed: {e}")
             continue
 
-        scores = result.get("scores", []) if isinstance(result, dict) else []
+        if not isinstance(result, dict):
+            log.warning(f"commenter_scoring: unexpected result type {type(result)}: {result!r}")
+            continue
 
+        scores = result.get("scores", [])
+        if not isinstance(scores, list):
+            log.warning(f"commenter_scoring: 'scores' is not a list — full result: {result!r}")
+            continue
+
+        matched = 0
         # Match results back by index
         for item in scores:
             raw_index = item.get("index")
@@ -465,14 +473,21 @@ def score_community_tone(conn, community_id: int,
             try:
                 item_index = int(raw_index)
             except (TypeError, ValueError):
+                log.warning(f"commenter_scoring: bad index {raw_index!r} in item {item!r}")
+
                 continue
             aid = index_to_aid.get(item_index)
-            if aid is None or tone_score is None:
+            if tone_score is None:
+                log.warning(f"commenter_scoring: missing score in item {item!r}")
+                continue
+            if aid is None:
+                log.warning(f"commenter_scoring: index {item_index} not in index_to_aid {list(index_to_aid.keys())}")
                 continue
             try:
                 tone_score = float(tone_score)
                 tone_score = round(min(max(tone_score, 0.0), 1.0), 4)
             except (TypeError, ValueError):
+                log.warning(f"commenter_scoring: could not parse score {tone_score!r}")
                 continue
             conn.execute(
                 "UPDATE commenter_scores "
@@ -481,8 +496,15 @@ def score_community_tone(conn, community_id: int,
                 "WHERE community_id = ? AND author_channel_id = ?",
                 (tone_score, reason, current_backend, current_model, community_id, aid),
             )
+            matched += 1
             total_scored += 1
 
+        if matched < len(sections):
+            log.warning(
+                f"commenter_scoring: batch matched {matched}/{len(sections)} — "
+                f"result keys: {list(result.keys())}, "
+                f"first item: {scores[0] if scores else 'empty'}"
+            )
         conn.commit()
 
     if total_scored == 0:
