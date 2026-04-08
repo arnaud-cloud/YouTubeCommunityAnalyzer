@@ -82,6 +82,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN vocab_richness_score REAL")
     if "llm_tone_score" not in cs_cols:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_score REAL")
+    if "llm_politeness_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_politeness_score REAL")
+    if "llm_constructiveness_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_constructiveness_score REAL")
+    if "llm_depth_score" not in cs_cols:
+        conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_depth_score REAL")
     if "llm_tone_reason" not in cs_cols:
         conn.execute("ALTER TABLE commenter_scores ADD COLUMN llm_tone_reason TEXT")
     if "llm_tone_backend" not in cs_cols:

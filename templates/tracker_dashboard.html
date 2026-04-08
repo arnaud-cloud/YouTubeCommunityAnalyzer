@@ -626,25 +626,33 @@ function renderToneCard(channelFilter) {
     const tierColor = tierColors[tier] || '#aaa';
     const pct = Math.round((s.quality_score || 0) * 100);
 
+    function toneColor(v) {
+        return v >= 0.65 ? '#2ecc71' : v >= 0.35 ? '#f39c12' : '#e74c3c';
+    }
     const bars = [
-        ['Engagement',    Math.round((s.avg_engagement_norm || 0) * 100)],
-        ['Channel spread',Math.round((s.channel_spread_score || 0) * 100)],
-        ['Like ratio',    Math.round((s.like_ratio_score || 0) * 100)],
-        ['Factual anchors',Math.round((s.factual_anchor_score || 0) * 100)],
-        ['Avg length',    Math.round((s.avg_length_score || 0) * 100)],
+        ['Engagement',    Math.round((s.avg_engagement_norm || 0) * 100), 'var(--accent)'],
+        ['Channel spread',Math.round((s.channel_spread_score || 0) * 100), 'var(--accent)'],
+        ['Like ratio',    Math.round((s.like_ratio_score || 0) * 100), 'var(--accent)'],
+        ['Factual anchors',Math.round((s.factual_anchor_score || 0) * 100), 'var(--accent)'],
+        ['Avg length',    Math.round((s.avg_length_score || 0) * 100), 'var(--accent)'],
+        ['Vocab richness',Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'],
     ];
-    const contentLabel = s.llm_tone_score !== null && s.llm_tone_score !== undefined
-        ? ['LLM Tone', Math.round((s.llm_tone_score || 0) * 100), '#a8e6cf']
-        : ['Vocab richness', Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'];
-    bars.push([contentLabel[0], contentLabel[1], contentLabel[2]]);
+    if (s.llm_tone_score !== null && s.llm_tone_score !== undefined) {
+        const pol = s.llm_politeness_score || 0;
+        const con = s.llm_constructiveness_score || 0;
+        const dep = s.llm_depth_score || 0;
+        bars.push(['Politeness',       Math.round(pol * 100), toneColor(pol)]);
+        bars.push(['Constructiveness', Math.round(con * 100), toneColor(con)]);
+        bars.push(['Depth',            Math.round(dep * 100), toneColor(dep)]);
+    }
 
     const barsHtml = bars.map(([label, val, color]) => `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
-            <span style="width:110px;font-size:.78rem;color:${color || 'var(--muted)'}">${label}</span>
+            <span style="width:120px;font-size:.78rem;color:${color || 'var(--muted)'}">${label}</span>
             <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
                 <div style="width:${val}%;height:100%;background:${color || 'var(--accent)'};border-radius:3px"></div>
             </div>
-            <span style="width:30px;text-align:right;font-size:.78rem">${val}%</span>
+            <span style="width:30px;text-align:right;font-size:.78rem;color:${color}">${val}%</span>
         </div>`).join('');
 
     const toneReason = s.llm_tone_reason

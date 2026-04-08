@@ -137,8 +137,11 @@
       <option value="channel_count"  {% if sort_by == 'channel_count'  %}selected{% endif %}>Channels</option>
       <option value="comment_count"  {% if sort_by == 'comment_count'  %}selected{% endif %}>Comments</option>
       <option value="total_likes"    {% if sort_by == 'total_likes'    %}selected{% endif %}>Total Likes</option>
-      <option value="reply_ratio"    {% if sort_by == 'reply_ratio'    %}selected{% endif %}>Reply %</option>
-      <option value="llm_tone_score" {% if sort_by == 'llm_tone_score' %}selected{% endif %}>T% (LLM Tone)</option>
+      <option value="reply_ratio"              {% if sort_by == 'reply_ratio'              %}selected{% endif %}>Reply %</option>
+      <option value="llm_tone_score"           {% if sort_by == 'llm_tone_score'           %}selected{% endif %}>Tone (avg)</option>
+      <option value="llm_politeness_score"     {% if sort_by == 'llm_politeness_score'     %}selected{% endif %}>Politeness</option>
+      <option value="llm_constructiveness_score" {% if sort_by == 'llm_constructiveness_score' %}selected{% endif %}>Constructiveness</option>
+      <option value="llm_depth_score"          {% if sort_by == 'llm_depth_score'          %}selected{% endif %}>Depth</option>
     </select>
     {% if tier_filter %}
     <input type="hidden" name="tier" value="{{ tier_filter }}">
@@ -207,10 +210,20 @@
           <span title="Factual anchors">F:{{ "%.0f"|format((c.factual_anchor_score or 0) * 100) }}%</span>
           <span style="color:var(--border)">·</span>
           {% if c.llm_tone_score is not none %}
-          <span title="LLM tone score — {{ c.llm_tone_reason or 'politeness + constructiveness + depth' }}" style="color:#a8e6cf">T:{{ "%.0f"|format(c.llm_tone_score * 100) }}%</span>
+          {% for label, val, title in [
+            ('Pol', c.llm_politeness_score, 'Politeness'),
+            ('Con', c.llm_constructiveness_score, 'Constructiveness'),
+            ('Dep', c.llm_depth_score, 'Analytical Depth'),
+          ] %}
+          {% set pct = ((val or 0) * 100) | int %}
+          {% set color = '#2ecc71' if (val or 0) >= 0.65 else ('#f39c12' if (val or 0) >= 0.35 else '#e74c3c') %}
+          <span title="{{ title }}: {{ pct }}% — {{ c.llm_tone_reason or '' }}"
+                style="color:{{ color }};font-weight:500">{{ label }}:{{ pct }}%</span>
+          {% if not loop.last %}<span style="color:var(--border)">·</span>{% endif %}
+          {% endfor %}
           <span style="color:var(--border)">·</span>
           {% endif %}
-          <span title="Vocabulary richness (type-token ratio percentile){% if c.llm_tone_score is not none %} — combined with T% in score{% endif %}">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
+          <span title="Vocabulary richness (type-token ratio percentile)">V:{{ "%.0f"|format((c.vocab_richness_score or 0) * 100) }}%</span>
         </div>
       </td>
     </tr>

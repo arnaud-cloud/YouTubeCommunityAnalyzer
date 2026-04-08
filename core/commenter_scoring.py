@@ -76,7 +76,7 @@ Score anchors:
   1.0 = notably courteous, analytical, adds real value
 
 Required output format (JSON only, no other text):
-{"scores": [{"index": 1, "score": 0.7, "reason": "one sentence in English"}, ...]}
+{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "one sentence in English"}, ...]}
 
 Use the integer index shown before each commenter's name. One entry per commenter."""
 
@@ -100,7 +100,7 @@ Ancres de score :
   1,0 = notamment courtois, analytique, apporte une vraie valeur
 
 Format de sortie requis (JSON uniquement, aucun autre texte) :
-{"scores": [{"index": 1, "score": 0.7, "reason": "une phrase en français"}, ...]}
+{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "une phrase en français"}, ...]}
 
 Utilisez l'index entier affiché avant le nom de chaque commentateur. Une entrée par commentateur."""
 
@@ -124,7 +124,7 @@ Anclas de puntuación:
   1,0 = notablemente cortés, analítico, aporta valor real
 
 Formato de salida requerido (solo JSON, sin otro texto):
-{"scores": [{"index": 1, "score": 0.7, "reason": "una frase en español"}, ...]}
+{"scores": [{"index": 1, "politeness": 0.8, "constructiveness": 0.6, "depth": 0.7, "reason": "una frase en español"}, ...]}
 
 Usa el índice entero que aparece antes del nombre de cada comentarista. Una entrada por comentarista."""
 
@@ -336,13 +336,17 @@ def score_community(conn, community_id: int) -> int:
     # Preserve existing LLM tone scores across re-scoring
     existing_tone: dict[str, dict] = {
         r["author_channel_id"]: {
-            "llm_tone_score": r["llm_tone_score"],
-            "llm_tone_reason": r["llm_tone_reason"],
-            "llm_tone_backend": r["llm_tone_backend"],
-            "llm_tone_model": r["llm_tone_model"],
+            "llm_tone_score":              r["llm_tone_score"],
+            "llm_politeness_score":        r["llm_politeness_score"],
+            "llm_constructiveness_score":  r["llm_constructiveness_score"],
+            "llm_depth_score":             r["llm_depth_score"],
+            "llm_tone_reason":             r["llm_tone_reason"],
+            "llm_tone_backend":            r["llm_tone_backend"],
+            "llm_tone_model":              r["llm_tone_model"],
         }
         for r in conn.execute(
-            "SELECT author_channel_id, llm_tone_score, llm_tone_reason, "
+            "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
+            "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
             "llm_tone_backend, llm_tone_model "
             "FROM commenter_scores WHERE community_id = ? AND llm_tone_score IS NOT NULL",
             (community_id,),
@@ -351,10 +355,13 @@ def score_community(conn, community_id: int) -> int:
     for s in stats:
         tone = existing_tone.get(s["author_channel_id"])
         if tone:
-            s["llm_tone_score"]   = tone["llm_tone_score"]
-            s["llm_tone_reason"]  = tone["llm_tone_reason"]
-            s["llm_tone_backend"] = tone["llm_tone_backend"]
-            s["llm_tone_model"]   = tone["llm_tone_model"]
+            s["llm_tone_score"]             = tone["llm_tone_score"]
+            s["llm_politeness_score"]       = tone["llm_politeness_score"]
+            s["llm_constructiveness_score"] = tone["llm_constructiveness_score"]
+            s["llm_depth_score"]            = tone["llm_depth_score"]
+            s["llm_tone_reason"]            = tone["llm_tone_reason"]
+            s["llm_tone_backend"]           = tone["llm_tone_backend"]
+            s["llm_tone_model"]             = tone["llm_tone_model"]
 
     enriched = _compute_component_scores(stats)
 
@@ -367,10 +374,11 @@ def score_community(conn, community_id: int) -> int:
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
                 factual_anchor_score, avg_length_score, vocab_richness_score,
-                llm_tone_score, llm_tone_reason, llm_tone_backend, llm_tone_model,
+                llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
+                llm_tone_reason, llm_tone_backend, llm_tone_model,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -385,6 +393,9 @@ def score_community(conn, community_id: int) -> int:
                 r["avg_length_score"],
                 r["vocab_richness_score"],
                 r.get("llm_tone_score"),
+                r.get("llm_politeness_score"),
+                r.get("llm_constructiveness_score"),
+                r.get("llm_depth_score"),
                 r.get("llm_tone_reason"),
                 r.get("llm_tone_backend"),
                 r.get("llm_tone_model"),
@@ -568,25 +579,45 @@ def score_community_tone(conn, community_id: int,
         def _store_score(item, idx_map) -> bool:
             """Parse one score item and write to DB. Returns True on success."""
             raw_index = item.get("index")
-            tone_score = item.get("score")
             reason = item.get("reason", "")
             try:
                 item_index = int(raw_index)
             except (TypeError, ValueError):
                 return False
             aid = idx_map.get(item_index)
-            if aid is None or tone_score is None:
+            if aid is None:
                 return False
-            try:
-                tone_score = round(min(max(float(tone_score), 0.0), 1.0), 4)
-            except (TypeError, ValueError):
+
+            def _clamp(v):
+                try:
+                    return round(min(max(float(v), 0.0), 1.0), 4)
+                except (TypeError, ValueError):
+                    return None
+
+            pol  = _clamp(item.get("politeness"))
+            con  = _clamp(item.get("constructiveness"))
+            dep  = _clamp(item.get("depth"))
+
+            # Fall back to legacy "score" key if sub-scores missing
+            if pol is None and con is None and dep is None:
+                avg = _clamp(item.get("score"))
+            else:
+                parts = [x for x in (pol, con, dep) if x is not None]
+                avg = round(sum(parts) / len(parts), 4) if parts else None
+
+            if avg is None:
                 return False
+
             conn.execute(
                 "UPDATE commenter_scores "
-                "SET llm_tone_score = ?, llm_tone_reason = ?, "
+                "SET llm_tone_score = ?, "
+                "    llm_politeness_score = ?, "
+                "    llm_constructiveness_score = ?, "
+                "    llm_depth_score = ?, "
+                "    llm_tone_reason = ?, "
                 "    llm_tone_backend = ?, llm_tone_model = ? "
                 "WHERE community_id = ? AND author_channel_id = ?",
-                (tone_score, reason, current_backend, current_model, community_id, aid),
+                (avg, pol, con, dep, reason, current_backend, current_model, community_id, aid),
             )
             return True
 
@@ -642,13 +673,17 @@ def score_community_tone(conn, community_id: int,
 
     tone_map: dict[str, dict] = {
         r["author_channel_id"]: {
-            "llm_tone_score":   r["llm_tone_score"],
-            "llm_tone_reason":  r["llm_tone_reason"],
-            "llm_tone_backend": r["llm_tone_backend"],
-            "llm_tone_model":   r["llm_tone_model"],
+            "llm_tone_score":              r["llm_tone_score"],
+            "llm_politeness_score":        r["llm_politeness_score"],
+            "llm_constructiveness_score":  r["llm_constructiveness_score"],
+            "llm_depth_score":             r["llm_depth_score"],
+            "llm_tone_reason":             r["llm_tone_reason"],
+            "llm_tone_backend":            r["llm_tone_backend"],
+            "llm_tone_model":              r["llm_tone_model"],
         }
         for r in conn.execute(
-            "SELECT author_channel_id, llm_tone_score, llm_tone_reason, "
+            "SELECT author_channel_id, llm_tone_score, llm_politeness_score, "
+            "llm_constructiveness_score, llm_depth_score, llm_tone_reason, "
             "llm_tone_backend, llm_tone_model "
             "FROM commenter_scores WHERE community_id = ?",
             (community_id,),
@@ -657,10 +692,13 @@ def score_community_tone(conn, community_id: int,
     for s in stats:
         t = tone_map.get(s["author_channel_id"], {})
         if t.get("llm_tone_score") is not None:
-            s["llm_tone_score"]   = t["llm_tone_score"]
-            s["llm_tone_reason"]  = t["llm_tone_reason"]
-            s["llm_tone_backend"] = t["llm_tone_backend"]
-            s["llm_tone_model"]   = t["llm_tone_model"]
+            s["llm_tone_score"]             = t["llm_tone_score"]
+            s["llm_politeness_score"]       = t["llm_politeness_score"]
+            s["llm_constructiveness_score"] = t["llm_constructiveness_score"]
+            s["llm_depth_score"]            = t["llm_depth_score"]
+            s["llm_tone_reason"]            = t["llm_tone_reason"]
+            s["llm_tone_backend"]           = t["llm_tone_backend"]
+            s["llm_tone_model"]             = t["llm_tone_model"]
 
     enriched = _compute_component_scores(stats)
 
@@ -673,10 +711,11 @@ def score_community_tone(conn, community_id: int,
                 quality_score, tier,
                 avg_engagement_norm, channel_spread_score, like_ratio_score,
                 factual_anchor_score, avg_length_score, vocab_richness_score,
-                llm_tone_score, llm_tone_reason, llm_tone_backend, llm_tone_model,
+                llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score,
+                llm_tone_reason, llm_tone_backend, llm_tone_model,
                 reply_penalty, reply_ratio,
                 comment_count, channel_count, total_likes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             (
                 community_id,
@@ -691,6 +730,9 @@ def score_community_tone(conn, community_id: int,
                 r["avg_length_score"],
                 r["vocab_richness_score"],
                 r.get("llm_tone_score"),
+                r.get("llm_politeness_score"),
+                r.get("llm_constructiveness_score"),
+                r.get("llm_depth_score"),
                 r.get("llm_tone_reason"),
                 r.get("llm_tone_backend"),
                 r.get("llm_tone_model"),
