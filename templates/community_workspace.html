@@ -714,6 +714,69 @@ function renderCoverage(channels, container) {
     });
 }
 
+// ── Workflow node click actions ──────────────────────────────────────
+(function() {
+    const NODE_ACTIONS = {
+        tracker_collect: {
+            label: 'Tracker Collect',
+            desc: 'Collect channel stats & video snapshots',
+            action: '{{ url_for("tracker.collect_now", community_id=community.id) }}',
+        },
+        gossip_collect: {
+            label: 'Gossip Collect',
+            desc: 'Fetch new comments from all channels',
+            action: '{{ url_for("gossip.start_collect", community_id=community.id) }}',
+        },
+        commenter_scoring: {
+            label: 'Commenter Scoring',
+            desc: 'Run algorithmic scoring on all commenters',
+            action: '{{ url_for("gossip.score_commenters_now", community_id=community.id) }}',
+        },
+        tone_scoring: {
+            label: 'LLM Tone Scoring',
+            desc: 'Run LLM tone analysis on all commenters',
+            action: '{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}',
+            fields: {scope: 'all'},
+        },
+        summarize: null,  // Part of pipeline presets, not standalone
+        aggregate: null,
+        analyze: null,
+        report: null,
+        themes: null,
+        exec_reports: null,
+        coverage: null,
+    };
+
+    document.querySelectorAll('.wf-node[data-step]').forEach(node => {
+        const step = node.dataset.step;
+        const config = NODE_ACTIONS[step];
+        if (!config) return;
+
+        node.style.cursor = 'pointer';
+        node.title = config.desc + ' — click to run';
+
+        node.addEventListener('click', () => {
+            if (!confirm(`Run ${config.label}?\n\n${config.desc}`)) return;
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = config.action;
+            form.style.display = 'none';
+            if (config.fields) {
+                Object.entries(config.fields).forEach(([k, v]) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = k;
+                    input.value = v;
+                    form.appendChild(input);
+                });
+            }
+            document.body.appendChild(form);
+            form.submit();
+        });
+    });
+})();
+
 // Run status polling (same as existing gossip_runs.html)
 (function() {
     const el = document.getElementById('active-run');
