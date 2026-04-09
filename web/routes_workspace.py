@@ -12,6 +12,9 @@ from core.db import get_db, get_community_channel_ids
 
 bp = Blueprint("workspace", __name__)
 
+# In-memory job tracker for background collect operations
+_collect_jobs: dict[int, dict] = {}  # community_id → {status, detail, channel, ...}
+
 
 def _format_bytes(n):
     if n < 1024:
@@ -273,24 +276,72 @@ def collect_range(community_id):
     channel_id = request.json.get("channel_id")
     date_from = request.json.get("date_from")
     date_to = request.json.get("date_to")
+    channel_name = request.json.get("channel_name", channel_id)
 
     if not channel_id or not date_from:
         return jsonify({"error": "channel_id and date_from are required"}), 400
 
+    # Don't start if already collecting for this community
+    existing = _collect_jobs.get(community_id, {})
+    if existing.get("status") == "running":
+        return jsonify({"error": "A collection is already running"}), 409
+
     db_path = current_app.config["DB_PATH"]
+    import time
+    _collect_jobs[community_id] = {
+        "status": "running", "type": "gap",
+        "channel_name": channel_name, "date_from": date_from,
+        "detail": f"Collecting {channel_name} from {date_from}...",
+        "progress_log": "", "started_at": time.time(),
+    }
+
+    def _progress(msg):
+        _collect_jobs[community_id]["progress_log"] += msg + "\n"
+        parts = msg.split("\t")
+        if parts[0] == "video":
+            _collect_jobs[community_id]["detail"] = f"{parts[1]} — video {parts[2]}: {parts[3]}"
+        elif parts[0] == "done":
+            _collect_jobs[community_id]["detail"] = f"{parts[1]} — {parts[2]}"
 
     def _run():
-        from core.db import get_db as _get_db
-        conn = _get_db(db_path)
-        # Temporarily set date_filter_after for targeted collection
+        from core.db import get_db as _get_db, get_setting
         from core.gossip_collect import collect_channel_comments
-        collect_channel_comments(conn, channel_id, date_after=date_from, date_before=date_to)
-        conn.close()
+        from core.youtube_api import build_youtube, QuotaTracker
+        conn = _get_db(db_path)
+        try:
+            api_key = get_setting(conn, "youtube_api_key")
+            if not api_key:
+                _collect_jobs[community_id]["status"] = "error"
+                _collect_jobs[community_id]["detail"] = "No YouTube API key configured"
+                return
+            youtube = build_youtube(api_key)
+            max_comments = int(get_setting(conn, "max_comments_per_video") or "500")
+            fetch_replies = (get_setting(conn, "fetch_replies") or "true").lower() == "true"
+            quota = QuotaTracker()
+            collect_channel_comments(
+                conn, youtube, channel_id,
+                max_videos=None, after=date_from,
+                max_comments=max_comments, fetch_replies=fetch_replies,
+                quota=quota, progress_callback=_progress,
+            )
+            _collect_jobs[community_id]["status"] = "done"
+        except Exception as e:
+            _collect_jobs[community_id]["status"] = "error"
+            _collect_jobs[community_id]["detail"] = str(e)
+        finally:
+            conn.close()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()
 
-    return jsonify({"ok": True, "message": f"Collection started for {channel_id} from {date_from}"})
+    return jsonify({"ok": True, "message": f"Collection started for {channel_name} from {date_from}"})
+
+
+@bp.route("/<int:community_id>/collect-status")
+def collect_status(community_id):
+    """JSON status for in-progress collect jobs."""
+    job = _collect_jobs.get(community_id, {"status": "idle"})
+    return jsonify(job)
 
 
 @bp.route("/<int:community_id>/channel/<path:channel_id>")

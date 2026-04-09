@@ -49,7 +49,16 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel active" id="panel-workflow">
 
-{# ── LLM job progress (tone scoring / creator analysis) ─────────── #}
+{# ── Background job progress bars ──────────────────────────────── #}
+<div id="collect-job-bar" class="llm-job-bar" style="display:none">
+    <div class="llm-job-header">
+        <span class="llm-job-icon">&#8595;</span>
+        <span class="llm-job-label" id="collect-job-label">Collecting</span>
+        <span class="llm-job-status" id="collect-job-status"></span>
+    </div>
+    <div class="llm-job-detail" id="collect-job-detail"></div>
+</div>
+
 <div id="llm-job-bar" class="llm-job-bar" style="display:none">
     <div class="llm-job-header">
         <span class="llm-job-icon">&#9881;</span>
@@ -713,11 +722,15 @@ function renderCoverage(channels, container) {
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({
                                 channel_id: ch.channel_id,
+                                channel_name: ch.channel_name,
                                 date_from: m + '-01',
                                 date_to: m + '-28'
                             })
                         }).then(r => r.json()).then(d => {
-                            if (d.ok) cell.style.background = 'rgba(124,77,255,0.3)';
+                            if (d.ok) {
+                                cell.style.background = 'rgba(124,77,255,0.3)';
+                                pollCollectJob();
+                            }
                         });
                     }
                 });
@@ -843,6 +856,51 @@ function renderCoverage(channels, container) {
         });
     }
 })();
+
+// ── Collect job progress polling ─────────────────────────────────────
+function pollCollectJob() {
+    const bar = document.getElementById('collect-job-bar');
+    const label = document.getElementById('collect-job-label');
+    const status = document.getElementById('collect-job-status');
+    const detail = document.getElementById('collect-job-detail');
+    const pollUrl = '{{ url_for("workspace.collect_status", community_id=community.id) }}';
+
+    function poll() {
+        fetch(pollUrl)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'idle') {
+                    bar.style.display = 'none';
+                    return;
+                }
+                bar.style.display = 'block';
+                bar.classList.remove('llm-job-done', 'llm-job-error');
+
+                if (data.status === 'running') {
+                    const typeLabel = data.type === 'gap' ? 'Gap Collection' : 'Collecting';
+                    label.textContent = typeLabel + (data.channel_name ? ' — ' + data.channel_name : '');
+                    status.textContent = 'Running';
+                    detail.textContent = data.detail || '';
+                    setTimeout(poll, 2000);
+                } else if (data.status === 'done') {
+                    bar.classList.add('llm-job-done');
+                    label.textContent = 'Collection Complete';
+                    status.textContent = '';
+                    detail.textContent = data.detail || 'Done.';
+                    setTimeout(() => { bar.style.display = 'none'; }, 5000);
+                } else if (data.status === 'error') {
+                    bar.classList.add('llm-job-error');
+                    label.textContent = 'Collection Failed';
+                    status.textContent = '';
+                    detail.textContent = data.detail || 'An error occurred.';
+                }
+            })
+            .catch(() => setTimeout(poll, 5000));
+    }
+    poll();
+}
+// Start polling on page load to catch in-progress jobs
+pollCollectJob();
 
 // ── LLM job progress polling ─────────────────────────────────────────
 (function() {
