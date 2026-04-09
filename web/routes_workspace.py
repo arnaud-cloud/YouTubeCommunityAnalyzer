@@ -359,11 +359,28 @@ def creator_view(community_id, channel_id):
         ORDER BY last_seen_at DESC
     """, (community_id, f"%{channel_name}%")).fetchall()
 
+    # Video snapshots time series (for engagement charts)
+    video_ids = [v["video_id"] for v in videos]
+    video_snapshots_data = []
+    if video_ids:
+        # Process in batches to avoid too many SQL params
+        for i in range(0, len(video_ids), 500):
+            batch = video_ids[i:i+500]
+            vph = ",".join("?" * len(batch))
+            video_snapshots_data.extend([dict(r) for r in conn.execute(f"""
+                SELECT vs.video_id, vs.channel_id, vs.snapshot_date,
+                       vs.view_count, vs.like_count, vs.comment_count
+                FROM video_snapshots vs
+                WHERE vs.video_id IN ({vph})
+                ORDER BY vs.snapshot_date
+            """, batch).fetchall()])
+
     # Commenter score (if this channel owner comments)
     commenter_score = conn.execute("""
         SELECT * FROM commenter_scores
         WHERE community_id = ? AND author_channel_id = ?
     """, (community_id, channel_id)).fetchone()
+    tone_score = dict(commenter_score) if commenter_score else None
 
     # All communities for topbar
     all_communities = conn.execute("SELECT id, name FROM communities ORDER BY name").fetchall()
@@ -378,10 +395,12 @@ def creator_view(community_id, channel_id):
         channel=channel,
         snapshot=snapshot,
         snapshots=[dict(s) for s in snapshots],
-        videos=videos,
+        videos=[dict(v) for v in videos],
+        video_snapshots=video_snapshots_data,
         gossip_items=gossip_items,
         themes=themes,
         commenter_score=commenter_score,
+        tone_score=tone_score,
         all_communities=all_communities,
         db_size_bytes=db_total,
         db_size_display=_format_bytes(db_total),

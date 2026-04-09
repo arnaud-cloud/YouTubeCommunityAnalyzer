@@ -43,8 +43,7 @@
             {% endif %}
         </div>
         <div class="card-actions">
-            <a href="{{ url_for('tracker.dashboard', community_id=c.id) }}" class="btn btn-sm">Dashboard</a>
-            <a href="{{ url_for('gossip.runs', community_id=c.id) }}" class="btn btn-sm">Gossip</a>
+            <a href="{{ url_for('workspace.community_workspace', community_id=c.id) }}" class="btn btn-sm">Workspace</a>
             <a href="{{ url_for('community.edit', community_id=c.id) }}" class="btn btn-sm btn-outline">Edit</a>
         </div>
     </div>

@@ -27,7 +27,7 @@
             <th class="col-subs">Subscribers</th>
             {% for c in communities %}
             <th class="col-community">
-                <a href="{{ url_for('tracker.dashboard', community_id=c.id) }}">{{ c.name }}</a>
+                <a href="{{ url_for('workspace.community_workspace', community_id=c.id) }}">{{ c.name }}</a>
             </th>
             {% endfor %}
         </tr>

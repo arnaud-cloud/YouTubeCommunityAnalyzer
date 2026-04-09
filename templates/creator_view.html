@@ -16,7 +16,6 @@
 {% endblock %}
 
 {% block content %}
-{# ── Back link ───────────────────────────────────────────────────── #}
 <p style="margin-bottom:1rem">
     <a href="{{ url_for('workspace.community_workspace', community_id=community.id) }}#creators">&larr; Back to {{ community.name }}</a>
 </p>
@@ -61,19 +60,42 @@
     {% endif %}
 </div>
 
+{# ── Stat tiles ──────────────────────────────────────────────────── #}
+<div class="stat-tiles" id="stat-tiles" style="grid-template-columns:repeat(auto-fit, minmax(140px, 1fr))">
+    <div class="stat-tile"><span class="stat-value" id="tile-avgvpv">-</span><span class="stat-label">Avg Views / Video</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-subs">-</span><span class="stat-label">Total Subscribers</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-views">-</span><span class="stat-label">Total Views</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-videos">-</span><span class="stat-label">Total Videos</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-age">-</span><span class="stat-label" id="tile-age-label">Channel Age</span></div>
+    <div class="stat-tile"><span class="stat-value" id="tile-vpm">-</span><span class="stat-label">Avg Videos / Month</span><span style="font-size:0.7rem;color:var(--muted);display:block">(last 6 months)</span></div>
+</div>
+
+{# ── Commenter Credibility card (same as tracker dashboard) ──────── #}
+<div id="tone-card" style="display:none;margin-bottom:1.5rem;background:var(--surface);border:1px solid #a8e6cf44;border-radius:8px;padding:1.1rem 1.25rem"></div>
+
 {# ── Metrics Over Time ──────────────────────────────────────────── #}
 {% if snapshots|length > 1 %}
 <div class="creator-section">
     <h2>Metrics Over Time</h2>
     <div class="chart-row">
-        <div class="chart-container half">
-            <h2>Subscribers</h2>
-            <canvas id="chart-subs" height="200"></canvas>
-        </div>
-        <div class="chart-container half">
-            <h2>Total Views</h2>
-            <canvas id="chart-views" height="200"></canvas>
-        </div>
+        <div class="chart-container half"><h2>Subscribers Over Time</h2><canvas id="subGrowthChart" height="200"></canvas></div>
+        <div class="chart-container half"><h2>Total Views Over Time</h2><canvas id="viewGrowthChart" height="200"></canvas></div>
+    </div>
+    <div class="chart-row">
+        <div class="chart-container half"><h2>Video Count Over Time</h2><canvas id="videoCountChart" height="200"></canvas></div>
+        <div class="chart-container half"><h2>Avg Views per Video Over Time</h2><canvas id="viewsPerVideoChart" height="200"></canvas></div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Video analytics ─────────────────────────────────────────────── #}
+{% if videos %}
+<div class="creator-section">
+    <h2>Video Analytics</h2>
+    <div class="chart-container"><h2>Top Videos by Views</h2><canvas id="topVideosChart" height="200"></canvas></div>
+    <div class="chart-row">
+        <div class="chart-container half"><h2>Duration Distribution</h2><canvas id="durationChart" height="300"></canvas></div>
+        <div class="chart-container half"><h2>Engagement (Like/View %)</h2><canvas id="engagementChart" height="300"></canvas></div>
     </div>
 </div>
 {% endif %}
@@ -96,7 +118,7 @@
 </div>
 {% endif %}
 
-{# ── Themes Involving This Creator ──────────────────────────────── #}
+{# ── Themes ──────────────────────────────────────────────────────── #}
 {% if themes %}
 <div class="creator-section">
     <h2>Themes ({{ themes|length }})</h2>
@@ -104,58 +126,13 @@
         {% for t in themes %}
         <a href="{{ url_for('themes.detail', theme_id=t.id) }}" class="card" style="text-decoration:none">
             <div class="card-header">
-                {% if t.gossip_type %}
-                <span class="badge" style="margin-bottom:.3rem">{{ t.gossip_type }}</span>
-                {% endif %}
+                {% if t.gossip_type %}<span class="badge" style="margin-bottom:.3rem">{{ t.gossip_type }}</span>{% endif %}
                 <h3 style="font-size:0.95rem">{{ t.title or 'Untitled Theme' }}</h3>
             </div>
-            <div class="card-meta">
-                <span>Evidence: {{ t.total_evidence }}</span>
-            </div>
+            <div class="card-meta"><span>Evidence: {{ t.total_evidence }}</span></div>
         </a>
         {% endfor %}
     </div>
-</div>
-{% endif %}
-
-{# ── Commenter Behavior ─────────────────────────────────────────── #}
-{% if commenter_score %}
-<div class="creator-section">
-    <h2>Commenter Credibility</h2>
-    <div class="stat-tiles" style="grid-template-columns:repeat(auto-fit, minmax(120px, 1fr))">
-        <div class="stat-tile">
-            <div class="stat-value">{{ "%.0f"|format(commenter_score.quality_score * 100) }}%</div>
-            <div class="stat-label">Quality</div>
-        </div>
-        {% if commenter_score.llm_tone_score is not none %}
-        <div class="stat-tile">
-            <div class="stat-value">{{ "%.0f"|format(commenter_score.llm_tone_score * 100) }}%</div>
-            <div class="stat-label">LLM Tone</div>
-        </div>
-        {% endif %}
-        <div class="stat-tile">
-            <div class="stat-value">{{ commenter_score.comment_count }}</div>
-            <div class="stat-label">Comments</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-value">{{ commenter_score.channel_count }}</div>
-            <div class="stat-label">Channels</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-value">{{ "%.1f"|format(commenter_score.reply_ratio * 100) }}%</div>
-            <div class="stat-label">Reply Ratio</div>
-        </div>
-        <div class="stat-tile">
-            <div class="stat-value">{{ commenter_score.total_likes }}</div>
-            <div class="stat-label">Total Likes</div>
-        </div>
-    </div>
-    {% if commenter_score.llm_tone_reason %}
-    <div style="margin-top:1rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem">
-        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:.5rem">LLM Assessment</h3>
-        <p style="font-size:.85rem">{{ commenter_score.llm_tone_reason }}</p>
-    </div>
-    {% endif %}
 </div>
 {% endif %}
 
@@ -166,15 +143,7 @@
     <div style="overflow-x:auto">
     <table class="data-table">
         <thead>
-            <tr>
-                <th>Title</th>
-                <th>Published</th>
-                <th>Views</th>
-                <th>Likes</th>
-                <th>Comments</th>
-                <th>Summary</th>
-                <th>Gossip</th>
-            </tr>
+            <tr><th>Title</th><th>Published</th><th>Views</th><th>Likes</th><th>Comments</th><th>Summary</th><th>Gossip</th></tr>
         </thead>
         <tbody>
             {% for v in videos %}
@@ -193,50 +162,215 @@
     </div>
 </div>
 {% endif %}
-
 {% endblock %}
 
 {% block scripts %}
-{% if snapshots|length > 1 %}
 <script>
-const snapshots = {{ snapshots | tojson }};
-const labels = snapshots.map(s => s.snapshot_date);
-const chartOpts = {
-    responsive: true,
-    plugins: {legend: {display: false}},
-    scales: {
-        x: {ticks: {color: '#9090b0', maxTicksLimit: 10}},
-        y: {ticks: {color: '#9090b0'}, grid: {color: 'rgba(42,42,74,0.5)'}}
+const CHANNEL_ID = {{ channel.channel_id | tojson }};
+const SNAPSHOTS = {{ snapshots | tojson }};
+const VIDEOS = {{ videos | tojson }};
+const VIDEO_SNAPSHOTS = {{ video_snapshots | tojson }};
+const TONE_SCORE = {{ tone_score | tojson }};
+
+const CHART_COLORS = [
+    '#7c4dff','#2ecc71','#e74c3c','#f39c12','#3498db',
+    '#e91e63','#00bcd4','#ff5722','#9c27b0','#4caf50',
+];
+Chart.defaults.color = '#e8e8f0';
+Chart.defaults.plugins.legend.labels.color = '#c0c0d0';
+
+let charts = {};
+
+// ── Stat tiles ──────────────────────────────────────────────────────
+(function() {
+    const ls = SNAPSHOTS.length ? SNAPSHOTS[SNAPSHOTS.length - 1] : null;
+    if (ls) {
+        document.getElementById('tile-subs').textContent = (ls.subscriber_count || 0).toLocaleString();
+        document.getElementById('tile-views').textContent = (ls.view_count || 0).toLocaleString();
+        document.getElementById('tile-videos').textContent = (ls.video_count || 0).toLocaleString();
+        const avgVpv = ls.video_count ? Math.round(ls.view_count / ls.video_count) : 0;
+        document.getElementById('tile-avgvpv').textContent = avgVpv.toLocaleString();
     }
-};
 
-new Chart(document.getElementById('chart-subs'), {
-    type: 'line',
-    data: {
-        labels: labels,
-        datasets: [{
-            data: snapshots.map(s => s.subscriber_count),
-            borderColor: '#7c4dff',
-            backgroundColor: 'rgba(124,77,255,0.1)',
-            fill: true, tension: 0.3, pointRadius: 2
-        }]
-    },
-    options: chartOpts
-});
+    // Channel age from oldest video
+    const now = new Date();
+    const pubs = VIDEOS.filter(v => v.published_at).map(v => new Date(v.published_at));
+    if (pubs.length) {
+        const oldest = new Date(Math.min(...pubs));
+        const totalMonths = Math.floor((now - oldest) / (1000 * 60 * 60 * 24 * 30.44));
+        const yrs = Math.floor(totalMonths / 12);
+        const mos = totalMonths % 12;
+        document.getElementById('tile-age').textContent = `${oldest.getFullYear()} · ${yrs} yr ${mos ? mos + ' mo' : ''}`;
+    }
 
-new Chart(document.getElementById('chart-views'), {
-    type: 'line',
-    data: {
-        labels: labels,
-        datasets: [{
-            data: snapshots.map(s => s.view_count),
-            borderColor: '#2ecc71',
-            backgroundColor: 'rgba(46,204,113,0.1)',
-            fill: true, tension: 0.3, pointRadius: 2
-        }]
-    },
-    options: chartOpts
-});
+    // Avg videos/month (last 6 months)
+    const sixAgo = new Date(now);
+    sixAgo.setMonth(sixAgo.getMonth() - 6);
+    const recentVids = VIDEOS.filter(v => v.published_at && new Date(v.published_at) >= sixAgo);
+    document.getElementById('tile-vpm').textContent = (recentVids.length / 6).toFixed(1);
+})();
+
+// ── Commenter Credibility card (ported from tracker dashboard) ──────
+(function() {
+    const card = document.getElementById('tone-card');
+    if (!TONE_SCORE) return;
+    const s = TONE_SCORE;
+    const tier = s.tier || '?';
+    const tierColors = {A:'#2ecc71', B:'#a8e6cf', C:'#f39c12', D:'#e74c3c'};
+    const tierColor = tierColors[tier] || '#aaa';
+    const pct = Math.round((s.quality_score || 0) * 100);
+
+    function toneColor(v) {
+        return v >= 0.65 ? '#2ecc71' : v >= 0.35 ? '#f39c12' : '#e74c3c';
+    }
+    const bars = [
+        ['Channel spread',Math.round((s.channel_spread_score || 0) * 100), 'var(--accent)'],
+        ['Like%',         Math.round((s.like_ratio_score || 0) * 100), 'var(--accent)'],
+        ['Avg length',    Math.round((s.avg_length_score || 0) * 100), 'var(--accent)'],
+        ['Vocab richness',Math.round((s.vocab_richness_score || 0) * 100), 'var(--accent)'],
+    ];
+    if (s.llm_tone_score !== null && s.llm_tone_score !== undefined) {
+        bars.push(['Substance (T)', Math.round((s.llm_tone_score || 0) * 100), toneColor(s.llm_tone_score || 0)]);
+    }
+
+    const barsHtml = bars.map(([label, val, color]) => `
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
+            <span style="width:120px;font-size:.78rem;color:${color || 'var(--muted)'}">${label}</span>
+            <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+                <div style="width:${val}%;height:100%;background:${color || 'var(--accent)'};border-radius:3px"></div>
+            </div>
+            <span style="width:30px;text-align:right;font-size:.78rem;color:${color}">${val}%</span>
+        </div>`).join('');
+
+    const toneReason = s.llm_tone_reason
+        ? `<div style="margin-top:.6rem;font-size:.88rem;line-height:1.5;color:var(--text)">${s.llm_tone_reason}</div>`
+        : '';
+
+    card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+            <div style="font-size:.85rem;font-weight:600;color:#a8e6cf">Commenter Credibility</div>
+            <span style="font-size:.82rem;font-weight:700;background:${tierColor}22;color:${tierColor};border:1px solid ${tierColor}44;border-radius:4px;padding:.15em .5em">Tier ${tier} · ${pct}%</span>
+            <span style="font-size:.78rem;color:var(--muted)">${s.comment_count || 0} comments · ${s.channel_count || 0} channels</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem 2rem">
+            <div>${barsHtml}</div>
+            <div style="font-size:.82rem;color:var(--muted)">
+                ${s.llm_tone_reason ? `<div style="font-size:.8rem;font-weight:600;color:#a8e6cf;margin-bottom:.2rem">T — Substance <span style="font-weight:400;color:var(--muted)">(constructiveness + analytical depth)</span></div>` : ''}
+                ${toneReason || '<span style="color:var(--muted)">No LLM tone analysis yet.</span>'}
+            </div>
+        </div>`;
+    card.style.display = '';
+})();
+
+// ── Time-series charts ──────────────────────────────────────────────
+function renderLineChart(canvasId, data, label, color) {
+    const el = document.getElementById(canvasId);
+    if (!el || !data.length) return;
+    charts[canvasId] = new Chart(el, {
+        type: 'line',
+        data: {
+            labels: data.map(s => s.snapshot_date),
+            datasets: [{
+                label,
+                data: data.map(s => s.y),
+                borderColor: color,
+                backgroundColor: color + '18',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: color,
+            }]
+        },
+        options: {
+            responsive: true,
+            interaction: {mode: 'index', intersect: false},
+            scales: {
+                x: {grid: {color: '#2a2a4a'}, ticks: {maxTicksLimit: 10}},
+                y: {grid: {color: '#2a2a4a'}},
+            },
+            plugins: {
+                legend: {display: false},
+                tooltip: {callbacks: {label: ctx => `${label}: ${ctx.parsed.y.toLocaleString()}`}},
+            },
+        },
+    });
+}
+
+if (SNAPSHOTS.length > 1) {
+    renderLineChart('subGrowthChart',
+        SNAPSHOTS.map(s => ({snapshot_date: s.snapshot_date, y: s.subscriber_count || 0})),
+        'Subscribers', '#7c4dff');
+    renderLineChart('viewGrowthChart',
+        SNAPSHOTS.map(s => ({snapshot_date: s.snapshot_date, y: s.view_count || 0})),
+        'Views', '#2ecc71');
+    renderLineChart('videoCountChart',
+        SNAPSHOTS.map(s => ({snapshot_date: s.snapshot_date, y: s.video_count || 0})),
+        'Videos', '#3498db');
+    renderLineChart('viewsPerVideoChart',
+        SNAPSHOTS.map(s => ({snapshot_date: s.snapshot_date, y: s.video_count ? Math.round(s.view_count / s.video_count) : 0})),
+        'Views/Video', '#f39c12');
+}
+
+// ── Bar/doughnut charts ─────────────────────────────────────────────
+function renderHBarChart(canvasId, labels, data, label, fontSize) {
+    const el = document.getElementById(canvasId);
+    if (!el || !data.length) return;
+    charts[canvasId] = new Chart(el, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{label, data, backgroundColor: CHART_COLORS.slice(0, labels.length)}],
+        },
+        options: {
+            indexAxis: 'y', responsive: true,
+            scales: {x: {grid: {color: '#2a2a4a'}}, y: {grid: {display: false}, ticks: {font: {size: fontSize || 11}}}},
+            plugins: {legend: {display: false}},
+        },
+    });
+}
+
+function parseDuration(iso) {
+    if (!iso) return 0;
+    const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return 0;
+    return (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+}
+
+if (VIDEOS.length) {
+    // Top videos
+    const topVids = [...VIDEOS].sort((a, b) => (b.latest_views || 0) - (a.latest_views || 0)).slice(0, 20);
+    renderHBarChart('topVideosChart',
+        topVids.map(v => (v.title || '').substring(0, 50)),
+        topVids.map(v => v.latest_views || 0), 'Views', 11);
+
+    // Duration distribution
+    const durBuckets = {'< 1min': 0, '1-5min': 0, '5-20min': 0, '20-60min': 0, '> 60min': 0};
+    for (const v of VIDEOS) {
+        const secs = parseDuration(v.duration);
+        if (secs < 60) durBuckets['< 1min']++;
+        else if (secs < 300) durBuckets['1-5min']++;
+        else if (secs < 1200) durBuckets['5-20min']++;
+        else if (secs < 3600) durBuckets['20-60min']++;
+        else durBuckets['> 60min']++;
+    }
+    const dEl = document.getElementById('durationChart');
+    if (dEl) {
+        charts['durationChart'] = new Chart(dEl, {
+            type: 'doughnut',
+            data: {labels: Object.keys(durBuckets), datasets: [{data: Object.values(durBuckets), backgroundColor: CHART_COLORS}]},
+            options: {responsive: true, plugins: {legend: {position: 'bottom'}}},
+        });
+    }
+
+    // Engagement
+    const engVids = VIDEOS.filter(v => (v.latest_views || 0) > 100)
+        .sort((a, b) => ((b.latest_likes||0)/(b.latest_views||1)) - ((a.latest_likes||0)/(a.latest_views||1)))
+        .slice(0, 15);
+    renderHBarChart('engagementChart',
+        engVids.map(v => (v.title || '').substring(0, 40)),
+        engVids.map(v => ((v.latest_likes||0) / (v.latest_views||1) * 100).toFixed(2)),
+        'Like/View %', 11);
+}
 </script>
-{% endif %}
 {% endblock %}

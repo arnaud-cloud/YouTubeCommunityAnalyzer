@@ -17,52 +17,8 @@ bp = Blueprint("tracker", __name__)
 
 @bp.route("/<int:community_id>")
 def dashboard(community_id):
-    conn = get_db(current_app.config["DB_PATH"])
-
-    community = conn.execute(
-        "SELECT * FROM communities WHERE id = ?", (community_id,)
-    ).fetchone()
-    if not community:
-        conn.close()
-        flash("Community not found.", "error")
-        return redirect(url_for("main.hub"))
-
-    channels = conn.execute("""
-        SELECT ch.channel_id, ch.channel_name, ch.handle, ch.thumbnail_url
-        FROM community_channels cc
-        JOIN channels ch ON cc.channel_id = ch.channel_id
-        WHERE cc.community_id = ?
-        ORDER BY ch.channel_name
-    """, (community_id,)).fetchall()
-
-    all_communities = conn.execute(
-        "SELECT id, name FROM communities ORDER BY name"
-    ).fetchall()
-
-    # Tone / credibility scores for channel owners (author_channel_id == channel_id)
-    channel_ids = [c["channel_id"] for c in channels]
-    tone_scores = {}
-    if channel_ids:
-        ph = ",".join("?" * len(channel_ids))
-        for row in conn.execute(
-            f"SELECT * FROM commenter_scores "
-            f"WHERE community_id = ? AND author_channel_id IN ({ph})",
-            [community_id] + channel_ids,
-        ).fetchall():
-            tone_scores[row["author_channel_id"]] = dict(row)
-
-    collect_status = get_setting(conn, f"tracker_collect_status_{community_id}")
-    collect_at = get_setting(conn, f"tracker_collect_at_{community_id}")
-    conn.close()
-    return render_template(
-        "tracker_dashboard.html",
-        community=dict(community),
-        channels=[dict(c) for c in channels],
-        all_communities=[dict(c) for c in all_communities],
-        collect_status=collect_status,
-        collect_at=collect_at,
-        tone_scores=tone_scores,
-    )
+    """Redirect old tracker dashboard to new workspace metrics tab."""
+    return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#metrics", code=301)
 
 
 @bp.route("/<int:community_id>/data")
@@ -138,7 +94,7 @@ def collect_now(community_id):
     if not api_key:
         conn.close()
         flash("YouTube API key not configured. Go to Settings.", "error")
-        return redirect(url_for("tracker.dashboard", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     db_path = current_app.config["DB_PATH"]
     set_setting(conn, f"tracker_collect_status_{community_id}", "running")
@@ -167,7 +123,7 @@ def collect_now(community_id):
     t = threading.Thread(target=_run, daemon=True)
     t.start()
     flash("Tracker collection started in background.", "success")
-    return redirect(url_for("tracker.dashboard", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/clear-status", methods=["POST"])
@@ -176,4 +132,4 @@ def clear_status(community_id):
     conn = get_db(current_app.config["DB_PATH"])
     set_setting(conn, f"tracker_collect_status_{community_id}", "")
     conn.close()
-    return redirect(url_for("tracker.dashboard", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))

@@ -249,54 +249,8 @@ def _get_preset_availability(conn, community_id: int, cost_estimates) -> dict:
 
 @bp.route("/<int:community_id>")
 def runs(community_id):
-    conn = get_db(current_app.config["DB_PATH"])
-
-    community = conn.execute(
-        "SELECT * FROM communities WHERE id = ?", (community_id,)
-    ).fetchone()
-    if not community:
-        conn.close()
-        flash("Community not found.", "error")
-        return redirect(url_for("main.hub"))
-
-    # Currently running (non-pending) run
-    active_run = conn.execute("""
-        SELECT * FROM gossip_runs
-        WHERE community_id = ? AND status NOT IN ('complete', 'failed', 'pending')
-        ORDER BY id ASC LIMIT 1
-    """, (community_id,)).fetchone()
-
-    # Queued (pending) runs
-    queued_runs = conn.execute("""
-        SELECT * FROM gossip_runs
-        WHERE community_id = ? AND status = 'pending'
-        ORDER BY id ASC
-    """, (community_id,)).fetchall()
-
-    # Run history
-    history = conn.execute("""
-        SELECT gr.*, ar.llm_backend
-        FROM gossip_runs gr
-        LEFT JOIN analysis_results ar ON gr.analysis_id = ar.id
-        WHERE gr.community_id = ?
-        ORDER BY gr.id DESC
-        LIMIT 20
-    """, (community_id,)).fetchall()
-
-    cost_estimates  = _get_cost_estimates(conn, community_id)
-    pipeline_status = _get_pipeline_status(conn, community_id)
-    presets         = _get_preset_availability(conn, community_id, cost_estimates)
-    conn.close()
-    return render_template(
-        "gossip_runs.html",
-        community=dict(community),
-        active_run=dict(active_run) if active_run else None,
-        queued_runs=[dict(r) for r in queued_runs],
-        history=[dict(r) for r in history],
-        cost_estimates=cost_estimates,
-        pipeline_status=pipeline_status,
-        presets=presets,
-    )
+    """Redirect old gossip runs page to new workspace workflow tab."""
+    return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#workflow", code=301)
 
 
 @bp.route("/<int:community_id>/run", methods=["POST"])
@@ -311,7 +265,7 @@ def start_run(community_id):
     if active:
         conn.close()
         flash("A gossip pipeline is already running for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     # Create run record
     cur = conn.execute(
@@ -331,7 +285,7 @@ def start_run(community_id):
     t.start()
 
     flash("Gossip pipeline started.", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/run-local", methods=["POST"])
@@ -352,7 +306,7 @@ def start_local(community_id):
     if active_runs and not collecting_only:
         conn.close()
         flash("A pipeline is already running or queued for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
     active = active_runs[0] if active_runs else None
 
     cur = conn.execute(
@@ -372,7 +326,7 @@ def start_local(community_id):
         flash("Local pipeline queued — will start after current collection finishes.", "success")
     else:
         flash("Local pipeline started.", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/collect", methods=["POST"])
@@ -385,7 +339,7 @@ def start_collect(community_id):
     if active:
         conn.close()
         flash("A pipeline is already running for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     cur = conn.execute(
         "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
@@ -401,7 +355,7 @@ def start_collect(community_id):
     )
     t.start()
     flash("Comment collection started.", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/summarize-force", methods=["POST"])
@@ -414,7 +368,7 @@ def start_force_summarize(community_id):
     if active:
         conn.close()
         flash("A pipeline is already running for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     cur = conn.execute(
         "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
@@ -430,7 +384,7 @@ def start_force_summarize(community_id):
     )
     t.start()
     flash("Force re-summarize started — all videos will be reprocessed.", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/reanalyze", methods=["POST"])
@@ -443,7 +397,7 @@ def start_reanalyze(community_id):
     if active:
         conn.close()
         flash("A pipeline is already running for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     cur = conn.execute(
         "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
@@ -459,7 +413,7 @@ def start_reanalyze(community_id):
     )
     t.start()
     flash("Re-analyze started — aggregate + analyze + report (no collect/summarize).", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/<int:community_id>/resummarize-all", methods=["POST"])
@@ -472,7 +426,7 @@ def start_resummarize_all(community_id):
     if active:
         conn.close()
         flash("A pipeline is already running for this community.", "error")
-        return redirect(url_for("gossip.runs", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     cur = conn.execute(
         "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
@@ -488,7 +442,7 @@ def start_resummarize_all(community_id):
     )
     t.start()
     flash("Re-summarize All started — all videos will be reprocessed from scratch.", "success")
-    return redirect(url_for("gossip.runs", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
 
 @bp.route("/run/<int:run_id>/status")
@@ -590,7 +544,7 @@ def executive_summary(community_id):
         except Exception as e:
             conn.close()
             flash(f"Executive summary failed: {e}", "error")
-            return redirect(url_for("gossip.runs", community_id=community_id))
+            return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     conn.close()
     return render_template(
@@ -631,7 +585,7 @@ def top_insights(community_id):
         except Exception as e:
             conn.close()
             flash(f"Top insights failed: {e}", "error")
-            return redirect(url_for("gossip.runs", community_id=community_id))
+            return redirect(url_for("workspace.community_workspace", community_id=community_id))
 
     conn.close()
     return render_template(
@@ -810,7 +764,7 @@ def score_commenters_now(community_id):
         flash(f"Scoring failed: {e}", "error")
     finally:
         conn.close()
-    return redirect(url_for("gossip.commenters", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#commenters")
 
 
 @bp.route("/<int:community_id>/tone-score-commenters", methods=["POST"])
@@ -825,7 +779,7 @@ def tone_score_commenters(community_id):
     existing_job = _tone_jobs.get(community_id, {})
     if existing_job.get("status") == "running":
         flash("Tone scoring is already running.", "warning")
-        return redirect(url_for("gossip.commenters", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#commenters")
 
     _tone_jobs[community_id] = {
         "status": "running", "done": 0, "total": 0,
@@ -863,7 +817,7 @@ def tone_score_commenters(community_id):
             conn.close()
 
     threading.Thread(target=_run, daemon=True).start()
-    return redirect(url_for("gossip.commenters", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#commenters")
 
 
 @bp.route("/<int:community_id>/tone-score-creators-detailed", methods=["POST"])
@@ -876,7 +830,7 @@ def tone_score_creators_detailed(community_id):
     existing_job = _tone_jobs.get(community_id, {})
     if existing_job.get("status") == "running":
         flash("A tone scoring job is already running.", "warning")
-        return redirect(url_for("gossip.commenters", community_id=community_id))
+        return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#commenters")
 
     _tone_jobs[community_id] = {
         "status": "running", "done": 0, "total": 0,
@@ -912,7 +866,7 @@ def tone_score_creators_detailed(community_id):
             conn.close()
 
     threading.Thread(target=_run, daemon=True).start()
-    return redirect(url_for("gossip.commenters", community_id=community_id))
+    return redirect(url_for("workspace.community_workspace", community_id=community_id) + "#commenters")
 
 
 @bp.route("/<int:community_id>/tone-score-status")

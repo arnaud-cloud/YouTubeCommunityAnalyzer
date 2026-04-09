@@ -409,10 +409,7 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel" id="panel-metrics">
     <div class="section">
-        <p class="muted">
-            <a href="{{ url_for('tracker.dashboard', community_id=community.id) }}" class="btn btn-primary btn-sm">Open Full Dashboard</a>
-            &nbsp; Full metrics dashboard with charts and collection controls.
-        </p>
+        <p class="muted">Content coverage timeline &amp; data gap detection. Click empty cells to trigger targeted collection.</p>
     </div>
 
     {# Coverage timeline #}
@@ -470,7 +467,7 @@
         <div class="page-header">
             <h2>Commenters ({{ commenters|length }})</h2>
             <div style="display:flex;gap:.5rem">
-                <a href="{{ url_for('gossip.commenters', community_id=community.id) }}" class="btn btn-outline btn-sm">Full Commenter View</a>
+                <a href="{{ url_for('gossip.commenters', community_id=community.id) }}" class="btn btn-outline btn-sm">Paginated View</a>
             </div>
         </div>
         {% if commenters %}
