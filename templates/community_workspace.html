@@ -736,16 +736,7 @@ function renderCoverage(channels, container) {
             desc: 'Run algorithmic scoring on all commenters',
             action: '{{ url_for("gossip.score_commenters_now", community_id=community.id) }}',
         },
-        tone_scoring: {
-            label: 'LLM Tone Scoring',
-            desc: 'Run LLM tone analysis on all commenters'
-                {% if cost_estimates.get('tone') and cost_estimates.tone.cost > 0 %}
-                + '\nEstimated cost: ~${{ "%.2f"|format(cost_estimates.tone.cost) }} ({{ cost_estimates.tone.commenters }} commenters)'
-                {% endif %},
-            action: '{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}',
-            fields: {scope: 'all'},
-        },
-        summarize: null,  // Part of pipeline presets, not standalone
+        summarize: null,
         aggregate: null,
         analyze: null,
         report: null,
@@ -754,8 +745,28 @@ function renderCoverage(channels, container) {
         coverage: null,
     };
 
+    function submitForm(action, fields) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = action;
+        form.style.display = 'none';
+        if (fields) {
+            Object.entries(fields).forEach(([k, v]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = k;
+                input.value = v;
+                form.appendChild(input);
+            });
+        }
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    // Standard single-action nodes
     document.querySelectorAll('.wf-node[data-step]').forEach(node => {
         const step = node.dataset.step;
+        if (step === 'tone_scoring') return; // handled separately
         const config = NODE_ACTIONS[step];
         if (!config) return;
 
@@ -764,24 +775,60 @@ function renderCoverage(channels, container) {
 
         node.addEventListener('click', () => {
             if (!confirm(`Run ${config.label}?\n\n${config.desc}`)) return;
-
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = config.action;
-            form.style.display = 'none';
-            if (config.fields) {
-                Object.entries(config.fields).forEach(([k, v]) => {
-                    const input = document.createElement('input');
-                    input.type = 'hidden';
-                    input.name = k;
-                    input.value = v;
-                    form.appendChild(input);
-                });
-            }
-            document.body.appendChild(form);
-            form.submit();
+            submitForm(config.action, config.fields);
         });
     });
+
+    // Tone scoring — popup menu with multiple options
+    const toneNode = document.querySelector('.wf-node[data-step="tone_scoring"]');
+    if (toneNode) {
+        toneNode.style.cursor = 'pointer';
+        toneNode.title = 'Click for tone scoring options';
+
+        // Build menu
+        const menu = document.createElement('div');
+        menu.className = 'wf-node-menu';
+        menu.innerHTML = `
+            <div class="wf-node-menu-title">LLM Tone Scoring</div>
+            <button class="wf-node-menu-btn" data-action="tone-all">
+                <strong>All commenters</strong>
+                <span>Local LLM · scores all unscored commenters</span>
+            </button>
+            <button class="wf-node-menu-btn" data-action="tone-creators">
+                <strong>Creators only</strong>
+                <span>Local LLM · channel owners only</span>
+            </button>
+            <button class="wf-node-menu-btn wf-node-menu-btn--accent" data-action="deep-creators">
+                <strong>Deep Creator Analysis</strong>
+                <span>Anthropic · full tone + defensiveness{% if cost_estimates.get('tone') and cost_estimates.tone.cost > 0 %} · ~${{ "%.2f"|format(cost_estimates.tone.cost) }}{% endif %}</span>
+            </button>
+        `;
+        menu.style.display = 'none';
+        toneNode.style.position = 'relative';
+        toneNode.appendChild(menu);
+
+        toneNode.addEventListener('click', (e) => {
+            e.stopPropagation();
+            menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.addEventListener('click', () => { menu.style.display = 'none'; });
+
+        menu.querySelectorAll('.wf-node-menu-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                menu.style.display = 'none';
+                if (action === 'tone-all') {
+                    submitForm('{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}', {scope: 'all'});
+                } else if (action === 'tone-creators') {
+                    submitForm('{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}', {scope: 'creators'});
+                } else if (action === 'deep-creators') {
+                    submitForm('{{ url_for("gossip.tone_score_creators_detailed", community_id=community.id) }}');
+                }
+            });
+        });
+    }
 })();
 
 // Run status polling (same as existing gossip_runs.html)

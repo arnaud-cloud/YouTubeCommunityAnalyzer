@@ -148,6 +148,66 @@
     color: var(--success);
 }
 
+/* Tone scoring popup menu */
+.wf-node-menu {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem;
+    margin-top: 0.4rem;
+    min-width: 240px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    text-align: left;
+}
+.wf-node-menu-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    padding: 0.2rem 0.5rem 0.4rem;
+}
+.wf-node-menu-btn {
+    display: block;
+    width: 100%;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    margin-bottom: 0.35rem;
+    cursor: pointer;
+    text-align: left;
+    font-family: inherit;
+    transition: border-color 0.15s, background 0.15s;
+}
+.wf-node-menu-btn:last-child { margin-bottom: 0; }
+.wf-node-menu-btn:hover {
+    border-color: var(--accent);
+    background: rgba(124, 77, 255, 0.08);
+}
+.wf-node-menu-btn strong {
+    display: block;
+    font-size: 0.82rem;
+    color: var(--text);
+    margin-bottom: 0.15rem;
+}
+.wf-node-menu-btn span {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--muted);
+}
+.wf-node-menu-btn--accent {
+    border-color: rgba(124, 77, 255, 0.3);
+}
+.wf-node-menu-btn--accent strong {
+    color: var(--accent);
+}
+
 .wf-conn {
     display: flex;
     align-items: center;
