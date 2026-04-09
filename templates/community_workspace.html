@@ -589,16 +589,16 @@
 <div class="workspace-panel" id="panel-creators">
     <div class="section">
         <div class="page-header" style="margin-bottom:1rem">
-            <h2>Channels ({{ channels|length }})</h2>
+            <h2>Creator Credibility ({{ creators|length }})</h2>
         </div>
 
-        {% if channels %}
+        {% if creators %}
         {# ── Sort & Color controls ─────────────────────────────────────── #}
         <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap">
             <div style="display:flex;gap:.5rem;align-items:center">
-                <label style="font-size:.9rem;color:var(--muted)">Sort by:</label>
+                <label style="font-size:.9rem;color:var(--muted)">Sort:</label>
                 <select id="creator-sort-metric" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
-                    {% for col, label in creator_metrics %}
+                    {% for col, label in creator_sort_cols %}
                     <option value="{{ col }}" {% if creators_sort == col %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
@@ -611,12 +611,14 @@
             <div style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
                 <span style="font-size:.82rem;color:var(--muted)">Color:</span>
                 <div style="display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden">
-                    <button class="cr-cm-btn" data-mode="abs" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff" title="Absolute thresholds">Abs</button>
+                    <button class="cr-cm-btn" data-mode="abs" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff" title="Absolute thresholds: &#8805;65% green, &#8805;35% orange, else red">Abs</button>
                     <button class="cr-cm-btn" data-mode="3" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="Top/middle/bottom thirds">3 bands</button>
                     <button class="cr-cm-btn" data-mode="5" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="5 equal percentile bands">5 bands</button>
                 </div>
-                <button id="cr-green-btn" style="padding:.25rem .65rem;font-size:.78rem;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:var(--muted);margin-left:.25rem" title="Sort by composite greenness">Greenness &#8597;</button>
+                <button id="cr-green-btn" style="padding:.25rem .65rem;font-size:.78rem;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:var(--muted);margin-left:.25rem" title="Sort by composite greenness (click to cycle)">Greenness &#8597;</button>
             </div>
+
+            <span style="font-size:.85rem;color:var(--muted);margin-left:auto">{{ creators|length }} creator{{ 's' if creators|length != 1 }}</span>
         </div>
 
         {# ── Table ─────────────────────────────────────────────────────── #}
@@ -625,46 +627,65 @@
             <thead>
                 <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">
                     <th style="padding:.4rem .5rem;width:2rem">#</th>
-                    <th style="padding:.4rem .5rem">Channel</th>
-                    <th style="padding:.4rem .4rem;text-align:right" title="Subscriber count (latest snapshot)">Subs</th>
-                    <th style="padding:.4rem .4rem;text-align:right" title="Total view count (latest snapshot)">Views</th>
-                    <th style="padding:.4rem .4rem;text-align:right" title="Video count (latest snapshot)">Vids</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Subscriber growth % from first to latest snapshot">Sub%</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="View growth % from first to latest snapshot">View%</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Avg views-per-video growth %">VPV%</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Engagement rate: likes / views %">Eng%</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Views per subscriber ratio">V/S</th>
-                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Comment rate: comments / views %">Cmt%</th>
+                    <th style="padding:.4rem .5rem">Name</th>
+                    <th style="padding:.4rem .5rem;width:3.5rem;text-align:center">Tier</th>
+                    <th style="padding:.4rem .5rem;min-width:110px">Score</th>
+                    <th style="padding:.4rem .4rem;text-align:right">Cmts</th>
+                    <th style="padding:.4rem .4rem;text-align:right">Likes</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Like% — percentile rank of average likes per comment within this community">Like%</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Vocabulary Richness — type-token ratio percentile: how varied their word choice is">Vcb</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Substance (LLM) — AI-assessed constructiveness + analytical depth. 0 = pure sycophancy, 1 = highly analytical">Sub</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Defensiveness &amp; Bragging (LLM) — detects defensive reactions to criticism and unprompted self-promotion. Lower is better">Def</th>
                 </tr>
             </thead>
             <tbody>
-            {% for ch in channels %}
+            {% for c in creators %}
+                {% set tier_color = {'A': '#2ecc71', 'B': '#a8e6cf', 'C': '#f39c12', 'D': '#e74c3c'}.get(c.tier, '#9090b0') %}
+                {% set pct = (c.quality_score * 100) | int %}
                 <tr data-rank="{{ loop.index }}" style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
                     <td style="padding:.4rem .5rem;color:var(--muted)">{{ loop.index }}</td>
-                    <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-                        <a href="{{ url_for('workspace.creator_view', community_id=community.id, channel_id=ch.channel_id) }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:.5rem" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
-                            {% if ch.thumbnail_url %}
-                            <img src="{{ ch.thumbnail_url }}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0" loading="lazy">
+                    <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ c.channel_name or c.author_name }}">
+                        <a href="{{ url_for('workspace.creator_view', community_id=community.id, channel_id=c.author_channel_id) }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:.5rem" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                            {% if c.thumbnail_url %}
+                            <img src="{{ c.thumbnail_url }}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0" loading="lazy">
                             {% endif %}
-                            <span title="{{ ch.channel_name }}">{{ ch.channel_name }}</span>
+                            <span>{{ c.channel_name or c.author_name or c.author_channel_id }}</span>
                         </a>
                     </td>
-                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.subscriber_count) }}</td>
-                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.view_count) }}</td>
-                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.video_count) }}</td>
-                    <td class="cmc" data-col="sub_growth" data-val="{{ ch.sub_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.sub_growth }}%</td>
-                    <td class="cmc" data-col="view_growth" data-val="{{ ch.view_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.view_growth }}%</td>
-                    <td class="cmc" data-col="avg_views_growth" data-val="{{ ch.avg_views_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.avg_views_growth }}%</td>
-                    <td class="cmc" data-col="engagement_rate" data-val="{{ ch.engagement_rate }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.engagement_rate }}%</td>
-                    <td class="cmc" data-col="views_per_sub" data-val="{{ ch.views_per_sub }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.views_per_sub }}</td>
-                    <td class="cmc" data-col="comment_rate" data-val="{{ ch.comment_rate }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.comment_rate }}%</td>
+                    <td style="padding:.4rem .5rem;text-align:center">
+                        <span class="tier-badge tier-{{ c.tier }}">{{ c.tier }}</span>
+                    </td>
+                    <td style="padding:.4rem .5rem">
+                        <div style="display:flex;align-items:center;gap:.4rem">
+                            <div style="flex:1;background:var(--border);border-radius:3px;height:5px;overflow:hidden">
+                                <div style="width:{{ pct }}%;height:100%;background:{{ tier_color }};border-radius:3px"></div>
+                            </div>
+                            <span style="font-size:.8rem;color:{{ tier_color }};min-width:2.2em;text-align:right">{{ "%.2f"|format(c.quality_score) }}</span>
+                        </div>
+                    </td>
+                    <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.comment_count }}</td>
+                    <td style="padding:.4rem .4rem;text-align:right;color:var(--muted);font-size:.82rem">{{ c.total_likes }}</td>
+                    {% set lrat = c.like_ratio_score or 0 %}
+                    <td class="cmc" data-col="lrat" data-val="{{ lrat }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(lrat * 100) }}%</td>
+                    {% set v_raw = c.vocab_richness_score or 0 %}
+                    <td class="cmc" data-col="vcb" data-val="{{ v_raw }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "%.0f"|format(v_raw * 100) }}%</td>
+                    {% if c.llm_tone_score is not none %}
+                    <td class="cmc" data-col="sub" data-val="{{ c.llm_tone_score }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem" title="{{ c.llm_tone_reason or '' }}">{{ "%.0f"|format(c.llm_tone_score * 100) }}%</td>
+                    {% else %}
+                    <td class="cmc" data-col="sub" data-val="" style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+                    {% endif %}
+                    {% if c.llm_defensiveness_score is not none %}
+                    <td class="cmc" data-col="def" data-val="{{ c.llm_defensiveness_score }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem" title="{{ c.llm_defensiveness_reason or '' }}">{{ "%.0f"|format(c.llm_defensiveness_score * 100) }}%</td>
+                    {% else %}
+                    <td class="cmc" data-col="def" data-val="" style="padding:.4rem .4rem;text-align:right;font-size:.82rem;color:var(--border)">—</td>
+                    {% endif %}
                 </tr>
             {% endfor %}
             </tbody>
         </table>
         </div>
         {% else %}
-        <p class="muted">No channels in this community. <a href="{{ url_for('community.edit', community_id=community.id) }}">Add channels</a></p>
+        <p class="muted">No creator scores yet. Run Commenter Scoring first, then LLM Tone Scoring for substance & defensiveness.</p>
         {% endif %}
     </div>
 </div>
@@ -1133,13 +1154,14 @@ document.querySelectorAll('form').forEach(form => {
     });
 });
 
-// ── Creator metrics table: sort, color, greenness ────────────────────
+// ── Creator credibility table: sort, color, greenness ────────────────
 (function() {
     const table = document.getElementById('creators-table');
     if (!table) return;
 
-    const C3 = ['#e74c3c', '#f39c12', '#2ecc71'];
-    const C5 = ['#e74c3c', '#e67e22', '#5dade2', '#a8e6cf', '#2ecc71'];
+    const INV = new Set(['def']);  // inverted: low = good
+    const C3  = ['#e74c3c', '#f39c12', '#2ecc71'];
+    const C5  = ['#e74c3c', '#e67e22', '#5dade2', '#a8e6cf', '#2ecc71'];
     let crColorMode = 'abs';
     let crGreenDir = null;
 
@@ -1165,7 +1187,7 @@ document.querySelectorAll('form').forEach(form => {
     if (dirDesc) dirDesc.addEventListener('click', () => applySort(sortSelect.value, 'desc'));
     if (dirAsc) dirAsc.addEventListener('click', () => applySort(sortSelect.value, 'asc'));
 
-    // ── Percentile color helpers ──
+    // ── Color helpers ──
     function percentileRank(sorted, v) {
         let lo = 0, hi = sorted.length;
         while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) lo = m + 1; else hi = m; }
@@ -1174,11 +1196,9 @@ document.querySelectorAll('form').forEach(form => {
     function bandColor(palette, pct) {
         return palette[Math.min(Math.floor(pct * palette.length), palette.length - 1)];
     }
-    function absColor(val) {
-        // For growth-style metrics: higher = better
-        if (val >= 66) return '#2ecc71';
-        if (val >= 33) return '#f39c12';
-        return '#e74c3c';
+    function absColor(col, val) {
+        if (col === 'def') return val < 0.3 ? '#2ecc71' : val < 0.6 ? '#f39c12' : '#e74c3c';
+        return val >= 0.65 ? '#2ecc71' : val >= 0.35 ? '#f39c12' : '#e74c3c';
     }
 
     function buildByCol(cells) {
@@ -1200,19 +1220,15 @@ document.querySelectorAll('form').forEach(form => {
         cells.forEach(td => {
             const v = td.dataset.val;
             if (v === '' || v == null) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
+            const col = td.dataset.col;
             const fv = parseFloat(v);
             let color;
             if (crColorMode === 'abs') {
-                // Percentile within col for abs mode: use the value directly
-                // For growth metrics, positive = good; we normalize to 0-100 range within page
-                const sorted = [];
-                cells.forEach(c => { if (c.dataset.col === td.dataset.col && c.dataset.val) sorted.push(parseFloat(c.dataset.val)); });
-                sorted.sort((a, b) => a - b);
-                const pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
-                color = pct >= 0.66 ? '#2ecc71' : pct >= 0.33 ? '#f39c12' : '#e74c3c';
+                color = absColor(col, fv);
             } else {
-                const sorted = byCol[td.dataset.col] || [];
-                const pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+                const sorted = byCol[col] || [];
+                let pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+                if (INV.has(col)) pct = 1 - pct;
                 color = bandColor(palette, pct);
             }
             td.style.color = color;
@@ -1237,18 +1253,17 @@ document.querySelectorAll('form').forEach(form => {
     function cellScore(td, byCol) {
         const v = td.dataset.val;
         if (v === '' || v == null) return null;
+        const col = td.dataset.col;
         const fv = parseFloat(v);
+        let q;
         if (crColorMode === 'abs') {
-            const sorted = [];
-            table.querySelectorAll(`td.cmc[data-col="${td.dataset.col}"]`).forEach(c => {
-                if (c.dataset.val) sorted.push(parseFloat(c.dataset.val));
-            });
-            sorted.sort((a, b) => a - b);
-            return sorted.length ? percentileRank(sorted, fv) : 0.5;
+            q = INV.has(col) ? 1 - fv : fv;
         } else {
-            const sorted = byCol[td.dataset.col] || [];
-            return sorted.length ? percentileRank(sorted, fv) : 0.5;
+            const sorted = byCol[col] || [];
+            let pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+            q = INV.has(col) ? 1 - pct : pct;
         }
+        return q;
     }
 
     function rowGreenScore(tr, byCol) {
@@ -1286,7 +1301,6 @@ document.querySelectorAll('form').forEach(form => {
             if (!crGreenDir) {
                 greenBtn.textContent = 'Greenness \u2195';
                 greenBtn.style.background = 'var(--surface)'; greenBtn.style.color = 'var(--muted)'; greenBtn.style.borderColor = 'var(--border)';
-                // Restore server order
                 const tbody = table.querySelector('tbody');
                 if (tbody) {
                     const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -1306,7 +1320,6 @@ document.querySelectorAll('form').forEach(form => {
         });
     }
 
-    // Apply default coloring on load
     applyCreatorColors();
 })();
 </script>

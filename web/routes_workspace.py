@@ -26,102 +26,16 @@ def _format_bytes(n):
     return f"{n / 1024 ** 3:.2f} GB"
 
 
-CREATOR_METRICS = [
-    ("subscriber_count", "Subscribers"),
-    ("view_count", "Total Views"),
-    ("video_count", "Videos"),
-    ("sub_growth", "Sub Growth %"),
-    ("view_growth", "View Growth %"),
-    ("avg_views_growth", "Avg Views/Vid Growth %"),
-    ("engagement_rate", "Engagement %"),
-    ("views_per_sub", "Views/Sub"),
-    ("comment_rate", "Comment Rate %"),
+CREATOR_SORT_COLS = [
+    ("quality_score",           "Quality Score"),
+    ("llm_tone_score",          "Substance (T)"),
+    ("vocab_richness_score",    "Vocab (V)"),
+    ("llm_defensiveness_score", "Defensiveness (D)"),
+    ("like_ratio_score",        "Like%"),
+    ("comment_count",           "Comments"),
+    ("total_likes",             "Total Likes"),
 ]
-
-_VALID_SORT_COLS = {m[0] for m in CREATOR_METRICS}
-
-
-def _build_creator_metrics(conn, channel_ids, ph, sort_col, sort_dir):
-    """Build enriched creator metrics list with growth calculations."""
-    if sort_col not in _VALID_SORT_COLS:
-        sort_col = "subscriber_count"
-    if sort_dir not in ("asc", "desc"):
-        sort_dir = "desc"
-
-    # Latest + earliest snapshots per channel
-    rows = conn.execute(f"""
-        SELECT ch.channel_id, ch.channel_name, ch.handle, ch.thumbnail_url,
-               latest.subscriber_count, latest.view_count, latest.video_count,
-               earliest.subscriber_count AS first_subs,
-               earliest.view_count AS first_views,
-               earliest.video_count AS first_videos,
-               eng.total_likes, eng.total_comments, eng.total_vid_views
-        FROM channels ch
-        LEFT JOIN channel_snapshots latest ON ch.channel_id = latest.channel_id
-            AND latest.snapshot_date = (
-                SELECT MAX(snapshot_date) FROM channel_snapshots
-                WHERE channel_id = ch.channel_id)
-        LEFT JOIN channel_snapshots earliest ON ch.channel_id = earliest.channel_id
-            AND earliest.snapshot_date = (
-                SELECT MIN(snapshot_date) FROM channel_snapshots
-                WHERE channel_id = ch.channel_id)
-        LEFT JOIN (
-            SELECT vs.channel_id,
-                   SUM(vs.like_count) AS total_likes,
-                   SUM(vs.comment_count) AS total_comments,
-                   SUM(vs.view_count) AS total_vid_views
-            FROM video_snapshots vs
-            WHERE vs.channel_id IN ({ph})
-              AND vs.snapshot_date = (
-                  SELECT MAX(vs2.snapshot_date) FROM video_snapshots vs2
-                  WHERE vs2.video_id = vs.video_id)
-            GROUP BY vs.channel_id
-        ) eng ON ch.channel_id = eng.channel_id
-        WHERE ch.channel_id IN ({ph})
-    """, list(channel_ids) + list(channel_ids)).fetchall()
-
-    creators = []
-    for r in rows:
-        subs = r["subscriber_count"] or 0
-        views = r["view_count"] or 0
-        videos = r["video_count"] or 0
-        first_subs = r["first_subs"] or 0
-        first_views = r["first_views"] or 0
-        first_videos = r["first_videos"] or 0
-        total_likes = r["total_likes"] or 0
-        total_comments = r["total_comments"] or 0
-        total_vid_views = r["total_vid_views"] or 0
-
-        sub_growth = ((subs - first_subs) / first_subs * 100) if first_subs > 0 else 0
-        view_growth = ((views - first_views) / first_views * 100) if first_views > 0 else 0
-
-        avg_now = (views / videos) if videos > 0 else 0
-        avg_first = (first_views / first_videos) if first_videos > 0 else 0
-        avg_views_growth = ((avg_now - avg_first) / avg_first * 100) if avg_first > 0 else 0
-
-        engagement_rate = (total_likes / total_vid_views * 100) if total_vid_views > 0 else 0
-        views_per_sub = (views / subs) if subs > 0 else 0
-        comment_rate = (total_comments / total_vid_views * 100) if total_vid_views > 0 else 0
-
-        creators.append({
-            "channel_id": r["channel_id"],
-            "channel_name": r["channel_name"],
-            "handle": r["handle"],
-            "thumbnail_url": r["thumbnail_url"],
-            "subscriber_count": subs,
-            "view_count": views,
-            "video_count": videos,
-            "sub_growth": round(sub_growth, 1),
-            "view_growth": round(view_growth, 1),
-            "avg_views_growth": round(avg_views_growth, 1),
-            "engagement_rate": round(engagement_rate, 2),
-            "views_per_sub": round(views_per_sub, 1),
-            "comment_rate": round(comment_rate, 3),
-        })
-
-    reverse = sort_dir == "desc"
-    creators.sort(key=lambda c: c.get(sort_col) or 0, reverse=reverse)
-    return creators
+_VALID_CREATOR_SORTS = {c[0] for c in CREATOR_SORT_COLS}
 
 
 @bp.route("/<int:community_id>")
@@ -223,13 +137,42 @@ def community_workspace(community_id):
         ORDER BY gr.id DESC LIMIT 20
     """, (community_id,)).fetchall()
 
-    # Channels list with growth metrics (for creators tab)
+    # Channels list (for sidebar / basic display)
     channels = []
-    creators_sort = request.args.get("csort", "subscriber_count")
-    creators_dir = request.args.get("cdir", "desc")
     if channel_ids:
         ph = ",".join("?" * len(channel_ids))
-        channels = _build_creator_metrics(conn, channel_ids, ph, creators_sort, creators_dir)
+        channels = conn.execute(f"""
+            SELECT ch.channel_id, ch.channel_name, ch.handle, ch.thumbnail_url,
+                   cs.subscriber_count
+            FROM channels ch
+            LEFT JOIN channel_snapshots cs ON ch.channel_id = cs.channel_id
+                AND cs.snapshot_date = (SELECT MAX(snapshot_date) FROM channel_snapshots WHERE channel_id = ch.channel_id)
+            WHERE ch.channel_id IN ({ph})
+            ORDER BY cs.subscriber_count DESC NULLS LAST
+        """, channel_ids).fetchall()
+
+    # Creator credibility scores (commenter_scores filtered to channel owners)
+    creators_sort = request.args.get("csort", "quality_score")
+    creators_dir = request.args.get("cdir", "desc")
+    if creators_sort not in _VALID_CREATOR_SORTS:
+        creators_sort = "quality_score"
+    if creators_dir not in ("asc", "desc"):
+        creators_dir = "desc"
+
+    creators = []
+    if channel_ids:
+        ph = ",".join("?" * len(channel_ids))
+        sort_expr = f"cs.{creators_sort} {'DESC' if creators_dir == 'desc' else 'ASC'} NULLS LAST"
+        creators = conn.execute(f"""
+            SELECT cs.*, ch.channel_name, ch.handle, ch.thumbnail_url,
+                   snap.subscriber_count
+            FROM commenter_scores cs
+            JOIN channels ch ON cs.author_channel_id = ch.channel_id
+            LEFT JOIN channel_snapshots snap ON ch.channel_id = snap.channel_id
+                AND snap.snapshot_date = (SELECT MAX(snapshot_date) FROM channel_snapshots WHERE channel_id = ch.channel_id)
+            WHERE cs.community_id = ? AND cs.author_channel_id IN ({ph})
+            ORDER BY {sort_expr}
+        """, [community_id] + list(channel_ids)).fetchall()
 
     # Themes (for themes tab)
     themes = conn.execute("""
@@ -300,7 +243,8 @@ def community_workspace(community_id):
         queued_runs=queued_runs,
         history=history,
         channels=channels,
-        creator_metrics=CREATOR_METRICS,
+        creators=creators,
+        creator_sort_cols=CREATOR_SORT_COLS,
         creators_sort=creators_sort,
         creators_dir=creators_dir,
         themes=themes,
