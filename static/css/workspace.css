@@ -588,3 +588,248 @@
     font-size: 0.75rem;
     color: var(--muted);
 }
+
+/* ── Superfan Explorer ───────────────────────────────────────── */
+.superfan-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.superfan-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    transition: border-color 0.15s;
+}
+.superfan-card:hover {
+    border-color: var(--accent);
+}
+.superfan-header {
+    margin-bottom: 0.6rem;
+}
+.superfan-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.2rem;
+    flex-wrap: wrap;
+}
+.superfan-name {
+    font-size: 0.92rem;
+    color: var(--text);
+}
+.superfan-role {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.superfan-role--bridge {
+    background: rgba(124, 77, 255, 0.15);
+    color: var(--accent);
+}
+.superfan-role--amplifier {
+    background: rgba(243, 156, 18, 0.15);
+    color: var(--warning);
+}
+.superfan-role--insider {
+    background: rgba(46, 204, 113, 0.15);
+    color: var(--success);
+}
+.superfan-reach {
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+.superfan-reach strong {
+    color: var(--text);
+}
+.superfan-stats {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+.superfan-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.superfan-stat-val {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.superfan-stat-lbl {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+.superfan-credibility-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+.superfan-credibility-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+.superfan-tone-row {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.72rem;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+}
+.superfan-actions {
+    margin-top: 0.4rem;
+}
+
+/* ── Entity Network Map ──────────────────────────────────────── */
+.network-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+.network-svg {
+    width: 100%;
+    min-height: 500px;
+}
+.network-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.network-controls label {
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+.network-controls select,
+.network-controls input[type="range"] {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.82rem;
+}
+.network-tooltip {
+    position: absolute;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 50;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    display: none;
+}
+.network-detail-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100%;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    padding: 1.2rem;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 40;
+}
+.network-detail-panel.open {
+    transform: translateX(0);
+}
+.network-detail-panel h3 {
+    font-size: 1rem;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+}
+.network-detail-close {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+}
+.network-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--muted);
+}
+
+/* ── Community Pulse Timeline ────────────────────────────────── */
+.pulse-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+.pulse-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.pulse-controls label {
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+.pulse-layer-toggle {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    cursor: pointer;
+}
+.pulse-layer-toggle input[type="checkbox"] {
+    accent-color: var(--accent);
+}
+.pulse-chart-area {
+    position: relative;
+    width: 100%;
+    min-height: 400px;
+}
+.pulse-legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+.pulse-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.pulse-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+.pulse-empty {
+    text-align: center;
+    padding: 3rem;
+    color: var(--muted);
+}

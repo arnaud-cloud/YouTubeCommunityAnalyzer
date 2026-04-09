@@ -3,6 +3,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/workspace.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block topbar_center %}
@@ -37,7 +38,9 @@
 {# ── Tab bar ─────────────────────────────────────────────────────── #}
 <div class="workspace-tabs" id="workspace-tabs">
     <button class="workspace-tab active" data-tab="workflow">Workflow</button>
+    <button class="workspace-tab" data-tab="pulse">Pulse</button>
     <button class="workspace-tab" data-tab="metrics">Metrics</button>
+    <button class="workspace-tab" data-tab="network">Network</button>
     <button class="workspace-tab" data-tab="themes">Themes</button>
     <button class="workspace-tab" data-tab="commenters">Commenters</button>
     <button class="workspace-tab" data-tab="reports">Reports</button>
@@ -447,6 +450,96 @@
 </div>
 
 {# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: PULSE                                                         #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-pulse">
+    <div class="section">
+        <h2>Community Pulse</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:1rem">
+            Unified timeline — video releases, comment surges, theme activity, and entity sentiment on one axis.
+        </p>
+        <div class="pulse-controls">
+            <label class="pulse-layer-toggle">
+                <input type="checkbox" id="pulse-layer-videos" checked> Videos
+            </label>
+            <label class="pulse-layer-toggle">
+                <input type="checkbox" id="pulse-layer-comments" checked> Comments
+            </label>
+            <label class="pulse-layer-toggle">
+                <input type="checkbox" id="pulse-layer-themes" checked> Themes
+            </label>
+            <label class="pulse-layer-toggle">
+                <input type="checkbox" id="pulse-layer-sentiment"> Entity Sentiment
+            </label>
+            <div style="display:flex;align-items:center;gap:.5rem">
+                <label style="font-size:.82rem;color:var(--muted)">Top themes:</label>
+                <select id="pulse-theme-count" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.25rem .4rem;font-size:.82rem">
+                    <option value="3">3</option>
+                    <option value="5" selected>5</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
+                </select>
+            </div>
+        </div>
+        <div class="pulse-container">
+            <div class="pulse-chart-area">
+                <canvas id="pulse-chart" style="width:100%;height:400px"></canvas>
+            </div>
+            <div id="pulse-legend" class="pulse-legend"></div>
+            <div id="pulse-detail" style="margin-top:1rem;display:none">
+                <h3 id="pulse-detail-title" style="font-size:.95rem;color:var(--accent);margin-bottom:.5rem"></h3>
+                <div id="pulse-detail-content" style="font-size:.82rem;color:var(--text)"></div>
+            </div>
+        </div>
+        <div id="pulse-empty" class="pulse-empty" style="display:none">
+            No timeline data yet. Run the pipeline to collect data.
+        </div>
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: NETWORK                                                       #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-network">
+    <div class="section">
+        <h2>Entity Relationship Network</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:1rem">
+            Who is talked about alongside whom — sized by mentions, colored by sentiment, linked by gossip co-occurrence.
+        </p>
+        <div class="network-controls">
+            <div style="display:flex;align-items:center;gap:.5rem">
+                <label>Min mentions:</label>
+                <input type="range" id="network-min-mentions" min="1" max="20" value="2" step="1">
+                <span id="network-mentions-label" style="font-size:.82rem;color:var(--text);min-width:2em">2</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem">
+                <label>Filter type:</label>
+                <select id="network-type-filter" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:.3rem .5rem;font-size:.82rem">
+                    <option value="">All types</option>
+                    <option value="drama">Drama</option>
+                    <option value="collaboration">Collaboration</option>
+                    <option value="relationship">Relationship</option>
+                    <option value="reputation">Reputation</option>
+                    <option value="trend">Trend</option>
+                </select>
+            </div>
+        </div>
+        <div class="network-container" id="network-container" style="min-height:520px">
+            <svg id="network-svg" class="network-svg"></svg>
+            <div id="network-tooltip" class="network-tooltip"></div>
+            <div id="network-detail" class="network-detail-panel">
+                <button class="network-detail-close" id="network-detail-close">&times;</button>
+                <h3 id="network-detail-title"></h3>
+                <div id="network-detail-body"></div>
+            </div>
+        </div>
+        <div id="network-empty" class="network-empty" style="display:none">
+            No entity data yet. Run the Summarize step first to extract entities from comments.
+        </div>
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
 {# TAB: THEMES                                                        #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel" id="panel-themes">
@@ -489,6 +582,70 @@
 {# TAB: COMMENTERS                                                    #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel" id="panel-commenters">
+    {% if superfans %}
+    <div class="section">
+        <h2>Cross-Channel Superfans ({{ superfans|length }})</h2>
+        <p class="muted" style="font-size:.82rem;margin-bottom:1rem">
+            Commenters active across multiple channels — the connective tissue of this community.
+        </p>
+        <div class="superfan-grid">
+            {% for sf in superfans %}
+            <div class="superfan-card" data-author="{{ sf.author_channel_id }}">
+                <div class="superfan-header">
+                    <div class="superfan-name-row">
+                        <strong class="superfan-name">{{ sf.author_name[:25] }}</strong>
+                        {% if sf.tier %}
+                        <span class="tier-badge tier-{{ sf.tier }}">{{ sf.tier }}</span>
+                        {% endif %}
+                        <span class="superfan-role superfan-role--{{ sf.role|lower }}">{{ sf.role }}</span>
+                    </div>
+                    <div class="superfan-reach">
+                        Active on <strong>{{ sf.channel_count }}</strong> / {{ total_channels }} channels
+                    </div>
+                </div>
+                <div class="superfan-stats">
+                    <div class="superfan-stat">
+                        <span class="superfan-stat-val">{{ sf.comment_count }}</span>
+                        <span class="superfan-stat-lbl">comments</span>
+                    </div>
+                    <div class="superfan-stat">
+                        <span class="superfan-stat-val">{{ sf.total_likes }}</span>
+                        <span class="superfan-stat-lbl">likes</span>
+                    </div>
+                    {% if sf.quality_score is defined and sf.quality_score is not none %}
+                    <div class="superfan-stat">
+                        <span class="superfan-stat-val">{{ "%.0f"|format(sf.quality_score * 100) }}%</span>
+                        <span class="superfan-stat-lbl">credibility</span>
+                    </div>
+                    {% endif %}
+                    {% if sf.evidence_count > 0 %}
+                    <div class="superfan-stat">
+                        <span class="superfan-stat-val" style="color:var(--accent)">{{ sf.evidence_count }}</span>
+                        <span class="superfan-stat-lbl">cited as evidence</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if sf.quality_score is defined and sf.quality_score is not none %}
+                <div class="superfan-credibility-bar">
+                    <div class="superfan-credibility-fill" style="width:{{ (sf.quality_score * 100)|int }}%;background:{% if sf.quality_score >= 0.65 %}var(--success){% elif sf.quality_score >= 0.45 %}#5dade2{% elif sf.quality_score >= 0.25 %}var(--warning){% else %}var(--danger){% endif %}"></div>
+                </div>
+                {% endif %}
+                {% if sf.llm_tone_score is defined and sf.llm_tone_score is not none %}
+                <div class="superfan-tone-row">
+                    {% if sf.llm_politeness_score is not none %}<span title="Politeness">P:{{ "%.0f"|format(sf.llm_politeness_score * 100) }}</span>{% endif %}
+                    {% if sf.llm_constructiveness_score is not none %}<span title="Constructiveness">C:{{ "%.0f"|format(sf.llm_constructiveness_score * 100) }}</span>{% endif %}
+                    {% if sf.llm_depth_score is not none %}<span title="Depth">D:{{ "%.0f"|format(sf.llm_depth_score * 100) }}</span>{% endif %}
+                </div>
+                {% endif %}
+                <div class="superfan-actions">
+                    <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=sf.author_channel_id) }}" class="btn btn-sm btn-outline">View Profile</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="section">
         <div class="page-header">
             <h2>Commenters ({{ commenters|length }})</h2>
@@ -706,6 +863,14 @@
         if (tabName === 'metrics' && !window._coverageLoaded) {
             window._coverageLoaded = true;
             loadCoverageTimeline();
+        }
+        if (tabName === 'network' && !window._networkLoaded) {
+            window._networkLoaded = true;
+            loadNetworkGraph();
+        }
+        if (tabName === 'pulse' && !window._pulseLoaded) {
+            window._pulseLoaded = true;
+            loadPulseTimeline();
         }
     }
 
@@ -1322,5 +1487,502 @@ document.querySelectorAll('form').forEach(form => {
 
     applyCreatorColors();
 })();
+
+// ══════════════════════════════════════════════════════════════════
+// ENTITY NETWORK GRAPH (D3.js force-directed)
+// ══════════════════════════════════════════════════════════════════
+function loadNetworkGraph() {
+    fetch('{{ url_for("workspace.network_data", community_id=community.id) }}')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.nodes.length) {
+                document.getElementById('network-empty').style.display = 'block';
+                document.getElementById('network-container').style.display = 'none';
+                return;
+            }
+            window._networkData = data;
+            initNetworkD3(data);
+        })
+        .catch(err => {
+            document.getElementById('network-empty').style.display = 'block';
+            document.getElementById('network-empty').textContent = 'Failed to load network data.';
+            document.getElementById('network-container').style.display = 'none';
+        });
+}
+
+function initNetworkD3(data) {
+    // Load D3 from CDN if not already present
+    if (typeof d3 === 'undefined') {
+        const script = document.createElement('script');
+        script.src = 'https://d3js.org/d3.v7.min.js';
+        script.onload = () => _renderNetwork(data);
+        document.head.appendChild(script);
+    } else {
+        _renderNetwork(data);
+    }
+}
+
+function _renderNetwork(data) {
+    const container = document.getElementById('network-container');
+    const svg = d3.select('#network-svg');
+    const tooltip = document.getElementById('network-tooltip');
+    const detailPanel = document.getElementById('network-detail');
+    const detailTitle = document.getElementById('network-detail-title');
+    const detailBody = document.getElementById('network-detail-body');
+    const detailClose = document.getElementById('network-detail-close');
+    const minMentionsSlider = document.getElementById('network-min-mentions');
+    const mentionsLabel = document.getElementById('network-mentions-label');
+    const typeFilter = document.getElementById('network-type-filter');
+
+    const width = container.clientWidth;
+    const height = Math.max(500, container.clientHeight - 10);
+    svg.attr('width', width).attr('height', height);
+
+    // Sentiment → color scale (red = negative, gray = neutral, green = positive)
+    function sentColor(s) {
+        if (s > 0.3) return '#2ecc71';
+        if (s > 0.1) return '#6ecf91';
+        if (s < -0.3) return '#e74c3c';
+        if (s < -0.1) return '#e6856e';
+        return '#9090b0';
+    }
+    // Edge color by gossip type
+    function edgeColor(type) {
+        const map = {drama:'#e74c3c', collaboration:'#2ecc71', relationship:'#5dade2', reputation:'#f39c12', trend:'#9b59b6'};
+        return map[type] || '#555';
+    }
+
+    let allNodes = data.nodes;
+    let allEdges = data.edges;
+    let currentMinMentions = 2;
+    let currentTypeFilter = '';
+
+    function filterAndRender() {
+        svg.selectAll('*').remove();
+
+        const filteredNodes = allNodes.filter(n => n.mentions >= currentMinMentions);
+        const nodeIds = new Set(filteredNodes.map(n => n.id));
+        let filteredEdges = allEdges.filter(e => nodeIds.has(e.source?.id || e.source) && nodeIds.has(e.target?.id || e.target));
+        if (currentTypeFilter) {
+            filteredEdges = filteredEdges.filter(e => e.dominant_type === currentTypeFilter);
+        }
+
+        if (!filteredNodes.length) {
+            svg.append('text').attr('x', width/2).attr('y', height/2)
+                .attr('text-anchor','middle').attr('fill','#9090b0').attr('font-size','14')
+                .text('No entities match the current filters.');
+            return;
+        }
+
+        // Clone data for D3 (it mutates objects)
+        const nodes = filteredNodes.map(n => ({...n}));
+        const edges = filteredEdges.map(e => ({
+            source: typeof e.source === 'object' ? e.source.id : e.source,
+            target: typeof e.target === 'object' ? e.target.id : e.target,
+            count: e.count, dominant_type: e.dominant_type, types: e.types
+        }));
+
+        const maxMentions = Math.max(...nodes.map(n => n.mentions));
+        const rScale = d => 6 + (d.mentions / maxMentions) * 22;
+
+        const simulation = d3.forceSimulation(nodes)
+            .force('link', d3.forceLink(edges).id(d => d.id).distance(100))
+            .force('charge', d3.forceManyBody().strength(-200))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(d => rScale(d) + 5));
+
+        // Edges
+        const link = svg.append('g').selectAll('line')
+            .data(edges).join('line')
+            .attr('stroke', d => edgeColor(d.dominant_type))
+            .attr('stroke-opacity', 0.5)
+            .attr('stroke-width', d => Math.min(1 + d.count, 6));
+
+        // Asymmetry arrows
+        const asymmetries = (data.asymmetries || []).filter(a =>
+            nodeIds.has(a.from) && nodeIds.has(a.to));
+        svg.append('defs').append('marker')
+            .attr('id', 'arrowhead').attr('viewBox', '0 -5 10 10')
+            .attr('refX', 15).attr('refY', 0).attr('markerWidth', 6).attr('markerHeight', 6)
+            .attr('orient', 'auto')
+            .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#f39c12');
+
+        const asymLinks = svg.append('g').selectAll('line.asym')
+            .data(asymmetries).join('line')
+            .attr('class', 'asym')
+            .attr('stroke', '#f39c12')
+            .attr('stroke-opacity', 0.4)
+            .attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', '4 3')
+            .attr('marker-end', 'url(#arrowhead)');
+
+        // Nodes
+        const node = svg.append('g').selectAll('circle')
+            .data(nodes).join('circle')
+            .attr('r', d => rScale(d))
+            .attr('fill', d => sentColor(d.sentiment))
+            .attr('stroke', '#1a1a2e')
+            .attr('stroke-width', 1.5)
+            .attr('cursor', 'pointer')
+            .call(d3.drag()
+                .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+                .on('drag', (e, d) => { d.fx = e.x; d.fy = e.y; })
+                .on('end', (e, d) => { if (!e.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+            );
+
+        // Labels
+        const label = svg.append('g').selectAll('text')
+            .data(nodes).join('text')
+            .text(d => d.id.length > 18 ? d.id.slice(0, 16) + '...' : d.id)
+            .attr('font-size', d => Math.max(9, Math.min(12, 8 + d.mentions / maxMentions * 6)))
+            .attr('fill', '#e8e8f0')
+            .attr('text-anchor', 'middle')
+            .attr('dy', d => rScale(d) + 14)
+            .attr('pointer-events', 'none');
+
+        // Hover tooltip
+        node.on('mouseover', (e, d) => {
+            tooltip.style.display = 'block';
+            tooltip.innerHTML = `<strong>${d.id}</strong><br>
+                Mentions: ${d.mentions}<br>
+                Sentiment: ${d.sentiment > 0 ? '+' : ''}${d.sentiment.toFixed(2)}<br>
+                Channels: ${d.channels} · Videos: ${d.videos}`;
+        }).on('mousemove', e => {
+            const rect = container.getBoundingClientRect();
+            tooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+            tooltip.style.top = (e.clientY - rect.top - 10) + 'px';
+        }).on('mouseout', () => {
+            tooltip.style.display = 'none';
+        });
+
+        // Click → detail panel
+        node.on('click', (e, d) => {
+            e.stopPropagation();
+            detailTitle.textContent = d.id;
+            let html = `<div style="margin-bottom:.8rem">
+                <span style="font-size:.82rem;color:var(--muted)">Mentions: ${d.mentions} · Sentiment: ${d.sentiment > 0 ? '+' : ''}${d.sentiment.toFixed(2)}</span>
+            </div>`;
+
+            // Sentiment timeline
+            const timeline = data.sentiment_timeline[d.id];
+            if (timeline && timeline.length > 1) {
+                html += `<h4 style="font-size:.82rem;color:var(--muted);margin-bottom:.3rem">Sentiment Over Time</h4>`;
+                html += `<div style="display:flex;align-items:end;gap:2px;height:50px;margin-bottom:.8rem">`;
+                const maxM = Math.max(...timeline.map(t => t.mentions));
+                timeline.forEach(t => {
+                    const h = Math.max(4, (t.mentions / maxM) * 48);
+                    html += `<div title="${t.month}: sent=${t.sentiment}, mentions=${t.mentions}"
+                        style="width:8px;height:${h}px;background:${sentColor(t.sentiment)};border-radius:1px;flex-shrink:0"></div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Channel breakdown
+            const channels = data.entity_channels[d.id];
+            if (channels) {
+                html += `<h4 style="font-size:.82rem;color:var(--muted);margin-bottom:.3rem">Mentioned On</h4>`;
+                const maxCh = Math.max(...channels.map(c => c.mentions));
+                channels.forEach(c => {
+                    const w = Math.max(10, (c.mentions / maxCh) * 100);
+                    html += `<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem;font-size:.78rem">
+                        <span style="width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${c.channel_name}</span>
+                        <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
+                            <div style="width:${w}%;height:100%;background:var(--accent);border-radius:3px"></div>
+                        </div>
+                        <span style="color:var(--muted);min-width:2em;text-align:right">${c.mentions}</span>
+                    </div>`;
+                });
+                html += `<div style="margin-bottom:.8rem"></div>`;
+            }
+
+            // Top claims
+            const claims = data.entity_claims[d.id];
+            if (claims) {
+                html += `<h4 style="font-size:.82rem;color:var(--muted);margin-bottom:.3rem">Top Claims</h4>`;
+                claims.forEach(c => {
+                    const typeColor = {drama:'#e74c3c',collaboration:'#2ecc71',relationship:'#5dade2',reputation:'#f39c12'}[c.gossip_type] || '#9090b0';
+                    html += `<div style="margin-bottom:.5rem;padding:.4rem .6rem;background:var(--bg);border-radius:4px;border-left:3px solid ${typeColor}">
+                        <div style="font-size:.72rem;color:${typeColor};text-transform:uppercase;margin-bottom:.15rem">${c.gossip_type || 'other'} · ${c.confidence || '?'}</div>
+                        <div style="font-size:.78rem;color:var(--text)">${c.claim || ''}</div>
+                    </div>`;
+                });
+            }
+
+            detailBody.innerHTML = html;
+            detailPanel.classList.add('open');
+        });
+
+        svg.on('click', () => detailPanel.classList.remove('open'));
+        detailClose.addEventListener('click', () => detailPanel.classList.remove('open'));
+
+        // Edge click
+        link.on('click', (e, d) => {
+            e.stopPropagation();
+            const src = d.source.id || d.source;
+            const tgt = d.target.id || d.target;
+            detailTitle.textContent = `${src} ↔ ${tgt}`;
+            let html = `<div style="font-size:.82rem;color:var(--muted);margin-bottom:.5rem">${d.count} shared gossip items</div>`;
+            if (d.types) {
+                html += `<div style="margin-bottom:.8rem">`;
+                Object.entries(d.types).forEach(([type, count]) => {
+                    html += `<span style="display:inline-block;padding:.1rem .4rem;border-radius:8px;font-size:.7rem;margin-right:.3rem;background:${edgeColor(type)}22;color:${edgeColor(type)}">${type}: ${count}</span>`;
+                });
+                html += `</div>`;
+            }
+            detailBody.innerHTML = html;
+            detailPanel.classList.add('open');
+        }).attr('cursor', 'pointer');
+
+        simulation.on('tick', () => {
+            link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+            node.attr('cx', d => d.x).attr('cy', d => d.y);
+            label.attr('x', d => d.x).attr('y', d => d.y);
+
+            // Update asymmetry arrows (find matching simulation nodes)
+            asymLinks.each(function(a) {
+                const srcNode = nodes.find(n => n.id === a.from);
+                const tgtNode = nodes.find(n => n.id === a.to);
+                if (srcNode && tgtNode) {
+                    d3.select(this)
+                        .attr('x1', srcNode.x).attr('y1', srcNode.y)
+                        .attr('x2', tgtNode.x).attr('y2', tgtNode.y);
+                }
+            });
+        });
+    }
+
+    // Filter controls
+    minMentionsSlider.addEventListener('input', () => {
+        currentMinMentions = parseInt(minMentionsSlider.value);
+        mentionsLabel.textContent = currentMinMentions;
+        filterAndRender();
+    });
+    typeFilter.addEventListener('change', () => {
+        currentTypeFilter = typeFilter.value;
+        filterAndRender();
+    });
+
+    filterAndRender();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// COMMUNITY PULSE TIMELINE (Chart.js)
+// ══════════════════════════════════════════════════════════════════
+function loadPulseTimeline() {
+    fetch('{{ url_for("workspace.pulse_data", community_id=community.id) }}')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.months.length) {
+                document.getElementById('pulse-empty').style.display = 'block';
+                document.querySelector('.pulse-container').style.display = 'none';
+                return;
+            }
+            window._pulseData = data;
+            initPulseChart(data);
+        })
+        .catch(err => {
+            document.getElementById('pulse-empty').style.display = 'block';
+            document.getElementById('pulse-empty').textContent = 'Failed to load pulse data.';
+            document.querySelector('.pulse-container').style.display = 'none';
+        });
+}
+
+function initPulseChart(data) {
+    const THEME_COLORS = ['#7c4dff','#e74c3c','#2ecc71','#f39c12','#5dade2','#e91e63','#00bcd4','#ff9800','#9c27b0','#8bc34a'];
+    const CHANNEL_COLORS = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63'];
+
+    const months = data.months;
+    const datasets = [];
+    let showVideos = true, showComments = true, showThemes = true, showSentiment = false;
+    let themeCount = 5;
+
+    function buildDatasets() {
+        const ds = [];
+
+        // Comment volume (area chart)
+        if (showComments) {
+            ds.push({
+                label: 'Comments',
+                data: months.map(m => data.comment_volume[m] || 0),
+                backgroundColor: 'rgba(124, 77, 255, 0.15)',
+                borderColor: '#7c4dff',
+                borderWidth: 1.5,
+                fill: true,
+                tension: 0.3,
+                yAxisID: 'y',
+                order: 2,
+            });
+        }
+
+        // Video releases per month (bar)
+        if (showVideos) {
+            ds.push({
+                label: 'Videos Released',
+                data: months.map(m => (data.videos_by_month[m] || []).length),
+                backgroundColor: 'rgba(46, 204, 113, 0.5)',
+                borderColor: '#2ecc71',
+                borderWidth: 1,
+                type: 'bar',
+                yAxisID: 'y2',
+                order: 3,
+                barPercentage: 0.6,
+            });
+        }
+
+        // Theme activity streams
+        if (showThemes) {
+            const topThemes = data.themes.slice(0, themeCount);
+            topThemes.forEach((t, i) => {
+                ds.push({
+                    label: t.title.slice(0, 30),
+                    data: months.map(m => t.activity[m] || 0),
+                    backgroundColor: THEME_COLORS[i % THEME_COLORS.length] + '22',
+                    borderColor: THEME_COLORS[i % THEME_COLORS.length],
+                    borderWidth: 1.5,
+                    fill: true,
+                    tension: 0.3,
+                    yAxisID: 'y',
+                    order: 1,
+                });
+            });
+        }
+
+        // Entity sentiment (line overlays)
+        if (showSentiment) {
+            data.sentiment_events.forEach((se, i) => {
+                ds.push({
+                    label: se.entity + ' (sent.)',
+                    data: months.map(m => se.monthly[m] !== undefined ? se.monthly[m] : null),
+                    borderColor: CHANNEL_COLORS[i % CHANNEL_COLORS.length],
+                    borderWidth: 2,
+                    borderDash: [5, 3],
+                    fill: false,
+                    tension: 0.3,
+                    yAxisID: 'y3',
+                    order: 0,
+                    pointRadius: months.map(m => {
+                        const v = se.monthly[m];
+                        return (v !== undefined && (v > 0.5 || v < -0.3)) ? 4 : 0;
+                    }),
+                    pointBackgroundColor: months.map(m => {
+                        const v = se.monthly[m];
+                        if (v === undefined) return 'transparent';
+                        return v > 0.3 ? '#2ecc71' : v < -0.3 ? '#e74c3c' : '#9090b0';
+                    }),
+                    spanGaps: true,
+                });
+            });
+        }
+
+        return ds;
+    }
+
+    function formatMonth(m) {
+        return m.length >= 7 ? m.slice(2, 7) : m;
+    }
+
+    let chart = null;
+    function renderChart() {
+        const ctx = document.getElementById('pulse-chart').getContext('2d');
+        if (chart) chart.destroy();
+
+        const ds = buildDatasets();
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: months.map(formatMonth), datasets: ds },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: function(items) {
+                                const idx = items[0]?.dataIndex;
+                                if (idx === undefined) return '';
+                                const m = months[idx];
+                                const vids = data.videos_by_month[m];
+                                if (!vids || !vids.length) return '';
+                                return '\nVideos: ' + vids.map(v => v.channel + ': ' + v.title.slice(0, 40)).join('\n');
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#9090b0', maxRotation: 45, autoSkip: true, maxTicksLimit: 24 }, grid: { color: '#2a2a4a' } },
+                    y: { position: 'left', title: { display: true, text: 'Activity', color: '#9090b0' }, ticks: { color: '#9090b0' }, grid: { color: '#2a2a4a22' } },
+                    y2: { position: 'right', title: { display: true, text: 'Videos', color: '#2ecc71' }, ticks: { color: '#2ecc71' }, grid: { display: false }, display: showVideos },
+                    y3: { position: 'right', title: { display: true, text: 'Sentiment', color: '#9090b0' }, ticks: { color: '#9090b0' }, grid: { display: false }, min: -1, max: 1, display: showSentiment },
+                },
+                onClick: function(e, elements) {
+                    if (!elements.length) return;
+                    const idx = elements[0].index;
+                    const m = months[idx];
+                    showPulseDetail(m, data);
+                }
+            }
+        });
+
+        // Build legend
+        const legendEl = document.getElementById('pulse-legend');
+        legendEl.innerHTML = ds.map(d =>
+            `<span class="pulse-legend-item"><span class="pulse-legend-dot" style="background:${d.borderColor}"></span>${d.label}</span>`
+        ).join('');
+    }
+
+    function showPulseDetail(month, data) {
+        const detail = document.getElementById('pulse-detail');
+        const title = document.getElementById('pulse-detail-title');
+        const content = document.getElementById('pulse-detail-content');
+
+        title.textContent = month;
+        let html = '';
+
+        const vids = data.videos_by_month[month];
+        if (vids && vids.length) {
+            html += `<strong>Videos released (${vids.length}):</strong><ul style="margin:.3rem 0 .6rem;padding-left:1.2rem">`;
+            vids.forEach(v => { html += `<li>${v.channel}: ${v.title}</li>`; });
+            html += '</ul>';
+        }
+
+        const comments = data.comment_volume[month];
+        if (comments) html += `<strong>Comments:</strong> ${comments.toLocaleString()}<br>`;
+
+        const activeThemes = data.themes.filter(t => t.activity[month] > 0)
+            .sort((a, b) => (b.activity[month] || 0) - (a.activity[month] || 0));
+        if (activeThemes.length) {
+            html += `<strong>Active themes (${activeThemes.length}):</strong><ul style="margin:.3rem 0 .6rem;padding-left:1.2rem">`;
+            activeThemes.slice(0, 8).forEach(t => {
+                html += `<li>${t.title} (${t.activity[month]} items)</li>`;
+            });
+            html += '</ul>';
+        }
+
+        const sentimentHits = data.sentiment_events.filter(se => se.monthly[month] !== undefined);
+        if (sentimentHits.length) {
+            html += `<strong>Entity sentiment:</strong><ul style="margin:.3rem 0 .6rem;padding-left:1.2rem">`;
+            sentimentHits.forEach(se => {
+                const v = se.monthly[month];
+                const color = v > 0.3 ? '#2ecc71' : v < -0.3 ? '#e74c3c' : '#9090b0';
+                html += `<li>${se.entity}: <span style="color:${color}">${v > 0 ? '+' : ''}${v.toFixed(2)}</span></li>`;
+            });
+            html += '</ul>';
+        }
+
+        content.innerHTML = html;
+        detail.style.display = 'block';
+    }
+
+    // Layer toggle controls
+    document.getElementById('pulse-layer-videos').addEventListener('change', e => { showVideos = e.target.checked; renderChart(); });
+    document.getElementById('pulse-layer-comments').addEventListener('change', e => { showComments = e.target.checked; renderChart(); });
+    document.getElementById('pulse-layer-themes').addEventListener('change', e => { showThemes = e.target.checked; renderChart(); });
+    document.getElementById('pulse-layer-sentiment').addEventListener('change', e => { showSentiment = e.target.checked; renderChart(); });
+    document.getElementById('pulse-theme-count').addEventListener('change', e => { themeCount = parseInt(e.target.value); renderChart(); });
+
+    renderChart();
+}
 </script>
 {% endblock %}

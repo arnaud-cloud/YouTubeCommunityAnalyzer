@@ -188,6 +188,79 @@ def community_workspace(community_id):
         ORDER BY quality_score DESC
     """, (community_id,)).fetchall()
 
+    # Cross-channel superfans (from latest aggregation)
+    superfans = []
+    agg_row = conn.execute("""
+        SELECT top_commenters_json FROM aggregation_results
+        WHERE community_id = ? ORDER BY id DESC LIMIT 1
+    """, (community_id,)).fetchone()
+    if agg_row and agg_row["top_commenters_json"]:
+        raw_superfans = json.loads(agg_row["top_commenters_json"])
+        sf_aids = [sf.get("author_channel_id", "") for sf in raw_superfans if sf.get("author_channel_id")]
+
+        # Batch-fetch commenter scores
+        score_map = {}
+        if sf_aids:
+            sfph = ",".join("?" * len(sf_aids))
+            for row in conn.execute(f"""
+                SELECT author_channel_id, quality_score, tier, channel_spread_score,
+                       llm_tone_score, llm_politeness_score, llm_constructiveness_score, llm_depth_score
+                FROM commenter_scores
+                WHERE community_id = ? AND author_channel_id IN ({sfph})
+            """, [community_id] + sf_aids).fetchall():
+                score_map[row["author_channel_id"]] = dict(row)
+
+        # Batch-fetch evidence counts: get all gossip evidence IDs and all superfan comment IDs
+        evidence_counts = {}
+        if sf_aids:
+            # All comment IDs by superfans
+            sfph = ",".join("?" * len(sf_aids))
+            author_comments_map = {}
+            for row in conn.execute(f"""
+                SELECT author_channel_id, comment_id FROM comments
+                WHERE author_channel_id IN ({sfph})
+            """, sf_aids).fetchall():
+                author_comments_map.setdefault(row["author_channel_id"], set()).add(row["comment_id"])
+
+            # All gossip evidence comment IDs for this community
+            if channel_ids:
+                cph = ",".join("?" * len(channel_ids))
+                ev_rows = conn.execute(f"""
+                    SELECT evidence_comment_ids FROM gossip_items
+                    WHERE channel_id IN ({cph})
+                """, channel_ids).fetchall()
+
+                for aid in sf_aids:
+                    count = 0
+                    acids = author_comments_map.get(aid, set())
+                    if acids:
+                        for ev_row in ev_rows:
+                            if ev_row["evidence_comment_ids"]:
+                                try:
+                                    eids = json.loads(ev_row["evidence_comment_ids"])
+                                    if any(eid in acids for eid in eids):
+                                        count += 1
+                                except (json.JSONDecodeError, TypeError):
+                                    pass
+                    evidence_counts[aid] = count
+
+        for sf in raw_superfans:
+            aid = sf.get("author_channel_id", "")
+            if aid in score_map:
+                sf.update(score_map[aid])
+            sf["evidence_count"] = evidence_counts.get(aid, 0)
+            # Derive role tag
+            spread = sf.get("channel_spread_score", 0) or 0
+            ch_count = sf.get("channel_count", 0) or 0
+            ec = sf["evidence_count"]
+            if ec >= 3:
+                sf["role"] = "Insider"
+            elif total_channels > 0 and ch_count / total_channels >= 0.6 and spread >= 0.5:
+                sf["role"] = "Bridge"
+            else:
+                sf["role"] = "Amplifier"
+        superfans = raw_superfans
+
     # Reports (for reports tab)
     reports = {
         "gossip_report": None,
@@ -249,6 +322,7 @@ def community_workspace(community_id):
         creators_dir=creators_dir,
         themes=themes,
         commenters=commenters,
+        superfans=superfans,
         reports=reports,
         all_communities=all_communities,
     )
@@ -310,6 +384,266 @@ def coverage_timeline(community_id):
 
     conn.close()
     return jsonify({"channels": result})
+
+
+@bp.route("/<int:community_id>/network-data")
+def network_data(community_id):
+    """JSON data for the entity relationship network graph."""
+    conn = get_db(current_app.config["DB_PATH"])
+    channel_ids = get_community_channel_ids(conn, community_id)
+    if not channel_ids:
+        conn.close()
+        return jsonify({"nodes": [], "edges": [], "asymmetries": []})
+
+    ph = ",".join("?" * len(channel_ids))
+
+    # Entity nodes from entity_mentions
+    entity_rows = conn.execute(f"""
+        SELECT canonical_name,
+               SUM(mention_count) AS total_mentions,
+               AVG(sentiment_score) AS avg_sentiment,
+               COUNT(DISTINCT channel_id) AS channel_count,
+               COUNT(DISTINCT video_id) AS video_count
+        FROM entity_mentions
+        WHERE channel_id IN ({ph})
+        GROUP BY canonical_name
+        ORDER BY total_mentions DESC
+        LIMIT 60
+    """, channel_ids).fetchall()
+
+    nodes = []
+    node_set = set()
+    for r in entity_rows:
+        name = r["canonical_name"]
+        if not name:
+            continue
+        nodes.append({
+            "id": name,
+            "mentions": r["total_mentions"] or 0,
+            "sentiment": round(r["avg_sentiment"] or 0, 3),
+            "channels": r["channel_count"] or 0,
+            "videos": r["video_count"] or 0,
+        })
+        node_set.add(name)
+
+    # Edges from gossip_items co-occurrence (subjects arrays)
+    gossip_rows = conn.execute(f"""
+        SELECT subjects, gossip_type, confidence, evidence_quality_score
+        FROM gossip_items
+        WHERE channel_id IN ({ph})
+    """, channel_ids).fetchall()
+
+    edge_map = {}  # (a, b) -> {count, types, ...}
+    for gr in gossip_rows:
+        try:
+            subjects = json.loads(gr["subjects"]) if gr["subjects"] else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        # Normalize to canonical names in our node set
+        matched = [s for s in subjects if s in node_set]
+        for i in range(len(matched)):
+            for j in range(i + 1, len(matched)):
+                a, b = tuple(sorted([matched[i], matched[j]]))
+                key = (a, b)
+                if key not in edge_map:
+                    edge_map[key] = {"source": a, "target": b, "count": 0, "types": {}}
+                edge_map[key]["count"] += 1
+                gtype = gr["gossip_type"] or "other"
+                edge_map[key]["types"][gtype] = edge_map[key]["types"].get(gtype, 0) + 1
+
+    edges = list(edge_map.values())
+    # Determine dominant type for each edge
+    for e in edges:
+        if e["types"]:
+            e["dominant_type"] = max(e["types"], key=e["types"].get)
+        else:
+            e["dominant_type"] = "other"
+
+    # Asymmetries from latest aggregation
+    asymmetries = []
+    agg_row = conn.execute("""
+        SELECT asymmetries_json FROM aggregation_results
+        WHERE community_id = ? ORDER BY id DESC LIMIT 1
+    """, (community_id,)).fetchone()
+    if agg_row and agg_row["asymmetries_json"]:
+        try:
+            asymmetries = json.loads(agg_row["asymmetries_json"])
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Sentiment timeline per entity (monthly, using video published_at as proxy)
+    sentiment_timeline = {}
+    for name in node_set:
+        rows = conn.execute(f"""
+            SELECT strftime('%Y-%m', v.published_at) AS month,
+                   AVG(em.sentiment_score) AS avg_sent,
+                   SUM(em.mention_count) AS mentions
+            FROM entity_mentions em
+            JOIN videos v ON em.video_id = v.video_id
+            WHERE em.canonical_name = ? AND em.channel_id IN ({ph})
+              AND v.published_at IS NOT NULL
+            GROUP BY month ORDER BY month
+        """, [name] + list(channel_ids)).fetchall()
+        if rows:
+            sentiment_timeline[name] = [
+                {"month": r["month"], "sentiment": round(r["avg_sent"] or 0, 3), "mentions": r["mentions"] or 0}
+                for r in rows if r["month"]
+            ]
+
+    # Top claims per entity
+    entity_claims = {}
+    for name in node_set:
+        claims = conn.execute(f"""
+            SELECT claim, gossip_type, confidence, evidence_quality_score, comment_likes_total
+            FROM gossip_items
+            WHERE channel_id IN ({ph}) AND subjects LIKE ?
+            ORDER BY COALESCE(evidence_quality_score, 0) DESC, comment_likes_total DESC
+            LIMIT 5
+        """, list(channel_ids) + [f"%{name}%"]).fetchall()
+        if claims:
+            entity_claims[name] = [dict(c) for c in claims]
+
+    # Channel breakdown per entity
+    entity_channels = {}
+    for name in node_set:
+        ch_rows = conn.execute(f"""
+            SELECT em.channel_id, ch.channel_name, SUM(em.mention_count) AS mentions
+            FROM entity_mentions em
+            JOIN channels ch ON em.channel_id = ch.channel_id
+            WHERE em.canonical_name = ? AND em.channel_id IN ({ph})
+            GROUP BY em.channel_id
+            ORDER BY mentions DESC
+        """, [name] + list(channel_ids)).fetchall()
+        if ch_rows:
+            entity_channels[name] = [dict(r) for r in ch_rows]
+
+    conn.close()
+    return jsonify({
+        "nodes": nodes,
+        "edges": edges,
+        "asymmetries": asymmetries,
+        "sentiment_timeline": sentiment_timeline,
+        "entity_claims": entity_claims,
+        "entity_channels": entity_channels,
+    })
+
+
+@bp.route("/<int:community_id>/pulse-data")
+def pulse_data(community_id):
+    """JSON data for the community pulse timeline."""
+    conn = get_db(current_app.config["DB_PATH"])
+    channel_ids = get_community_channel_ids(conn, community_id)
+    if not channel_ids:
+        conn.close()
+        return jsonify({"months": [], "videos": [], "comment_volume": [], "themes": [], "sentiment_events": []})
+
+    ph = ",".join("?" * len(channel_ids))
+
+    # Video releases by month (with channel info)
+    video_rows = conn.execute(f"""
+        SELECT v.video_id, v.title, v.channel_id, ch.channel_name,
+               strftime('%Y-%m', v.published_at) AS month,
+               v.published_at
+        FROM videos v
+        JOIN channels ch ON v.channel_id = ch.channel_id
+        WHERE v.channel_id IN ({ph}) AND v.published_at IS NOT NULL
+        ORDER BY v.published_at
+    """, channel_ids).fetchall()
+
+    videos_by_month = {}
+    for v in video_rows:
+        m = v["month"]
+        if m not in videos_by_month:
+            videos_by_month[m] = []
+        videos_by_month[m].append({
+            "title": v["title"],
+            "channel": v["channel_name"],
+            "channel_id": v["channel_id"],
+            "date": v["published_at"][:10] if v["published_at"] else "",
+        })
+
+    # Comment volume by month
+    comment_rows = conn.execute(f"""
+        SELECT strftime('%Y-%m', c.published_at) AS month,
+               COUNT(*) AS count
+        FROM comments c
+        WHERE c.channel_id IN ({ph}) AND c.published_at IS NOT NULL
+        GROUP BY month ORDER BY month
+    """, channel_ids).fetchall()
+    comment_volume = {r["month"]: r["count"] for r in comment_rows}
+
+    # Theme activity (from themes.activity_json)
+    theme_rows = conn.execute("""
+        SELECT id, title, gossip_type, activity_json, total_evidence
+        FROM themes WHERE community_id = ?
+        ORDER BY total_evidence DESC LIMIT 10
+    """, (community_id,)).fetchall()
+
+    themes_data = []
+    for t in theme_rows:
+        activity = {}
+        if t["activity_json"]:
+            try:
+                activity = json.loads(t["activity_json"])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        themes_data.append({
+            "id": t["id"],
+            "title": t["title"] or "Untitled",
+            "type": t["gossip_type"],
+            "activity": activity,
+            "total_evidence": t["total_evidence"] or 0,
+        })
+
+    # Entity sentiment events (monthly sentiment for top entities)
+    top_entities = conn.execute(f"""
+        SELECT canonical_name, SUM(mention_count) AS total
+        FROM entity_mentions WHERE channel_id IN ({ph})
+        GROUP BY canonical_name ORDER BY total DESC LIMIT 8
+    """, channel_ids).fetchall()
+
+    sentiment_events = []
+    for ent in top_entities:
+        name = ent["canonical_name"]
+        if not name:
+            continue
+        rows = conn.execute(f"""
+            SELECT strftime('%Y-%m', v.published_at) AS month,
+                   AVG(em.sentiment_score) AS avg_sent
+            FROM entity_mentions em
+            JOIN videos v ON em.video_id = v.video_id
+            WHERE em.canonical_name = ? AND em.channel_id IN ({ph})
+              AND v.published_at IS NOT NULL
+            GROUP BY month ORDER BY month
+        """, [name] + list(channel_ids)).fetchall()
+        monthly = {r["month"]: round(r["avg_sent"] or 0, 3) for r in rows if r["month"]}
+        if monthly:
+            sentiment_events.append({"entity": name, "monthly": monthly})
+
+    # Build unified month list
+    all_months = set()
+    all_months.update(videos_by_month.keys())
+    all_months.update(comment_volume.keys())
+    for t in themes_data:
+        all_months.update(t["activity"].keys())
+    for se in sentiment_events:
+        all_months.update(se["monthly"].keys())
+    months_sorted = sorted(all_months)
+
+    # Channel list for legend
+    channels_info = conn.execute(f"""
+        SELECT channel_id, channel_name FROM channels WHERE channel_id IN ({ph})
+    """, channel_ids).fetchall()
+
+    conn.close()
+    return jsonify({
+        "months": months_sorted,
+        "videos_by_month": videos_by_month,
+        "comment_volume": comment_volume,
+        "themes": themes_data,
+        "sentiment_events": sentiment_events,
+        "channels": [dict(c) for c in channels_info],
+    })
 
 
 @bp.route("/<int:community_id>/collect-range", methods=["POST"])
