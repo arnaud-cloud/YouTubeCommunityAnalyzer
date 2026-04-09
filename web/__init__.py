@@ -40,6 +40,7 @@ def create_app(db_path=None):
     from .routes_settings import bp as settings_bp
     from .routes_themes import bp as themes_bp
     from .routes_discovery import bp as discovery_bp
+    from .routes_workspace import bp as workspace_bp
 
     app.register_blueprint(main_bp)
     app.register_blueprint(community_bp, url_prefix="/community")
@@ -48,5 +49,23 @@ def create_app(db_path=None):
     app.register_blueprint(settings_bp, url_prefix="/settings")
     app.register_blueprint(themes_bp, url_prefix="/themes")
     app.register_blueprint(discovery_bp, url_prefix="/discovery")
+    app.register_blueprint(workspace_bp, url_prefix="/app/community")
+
+    # Inject DB size into all templates using the new base_app.html
+    @app.context_processor
+    def inject_db_size():
+        import os
+        db_path = app.config["DB_PATH"]
+        try:
+            size = os.path.getsize(db_path)
+        except OSError:
+            size = 0
+        if size < 1024 ** 2:
+            display = f"{size / 1024:.1f} KB"
+        elif size < 1024 ** 3:
+            display = f"{size / 1024 ** 2:.1f} MB"
+        else:
+            display = f"{size / 1024 ** 3:.2f} GB"
+        return {"db_size_bytes": size, "db_size_display": display}
 
     return app

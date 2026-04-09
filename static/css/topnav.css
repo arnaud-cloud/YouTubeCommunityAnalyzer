@@ -1,0 +1,138 @@
+/* Top navigation bar — replaces sidebar layout */
+
+:root {
+    --topbar-height: 56px;
+}
+
+/* Override sidebar-based body layout */
+body.topnav-layout {
+    flex-direction: column;
+}
+
+/* Hide the old sidebar when using topnav layout */
+body.topnav-layout .sidebar { display: none; }
+
+/* Top bar */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--topbar-height);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    z-index: 200;
+    gap: 1rem;
+}
+
+.topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+.topbar-brand-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent) 0%, #b47cff 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.topbar-brand-icon svg {
+    width: 20px;
+    height: 20px;
+    fill: #fff;
+}
+.topbar-brand-text {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+}
+
+/* Center: community selector */
+.topbar-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+}
+
+.topbar-community-select {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.35rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    min-width: 200px;
+    max-width: 320px;
+}
+.topbar-community-select:focus { border-color: var(--accent); outline: none; }
+
+/* Right: actions */
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.topbar-db-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+.topbar-db-pill svg {
+    width: 12px;
+    height: 12px;
+    fill: var(--muted);
+}
+
+.topbar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--muted);
+    text-decoration: none;
+    transition: background 0.15s, color 0.15s;
+}
+.topbar-link:hover, .topbar-link.active {
+    background: var(--surface2);
+    color: var(--text);
+}
+.topbar-link svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+}
+
+/* Adjust main content for topnav */
+body.topnav-layout .content {
+    margin-left: 0;
+    margin-top: var(--topbar-height);
+    padding: 1.5rem 2rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .topbar-brand-text { display: none; }
+    .topbar-community-select { min-width: 140px; }
+    body.topnav-layout .content { padding: 1rem; }
+}

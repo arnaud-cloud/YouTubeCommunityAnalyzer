@@ -57,7 +57,7 @@ def edit(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     # Fetch sources with enriched metadata
     sources = _get_sources_with_meta(conn, community_id)
@@ -257,7 +257,7 @@ def delete(community_id):
     conn.commit()
     conn.close()
     flash("Community deleted.", "success")
-    return redirect(url_for("main.home"))
+    return redirect(url_for("main.hub"))
 
 
 @bp.route("/manage")

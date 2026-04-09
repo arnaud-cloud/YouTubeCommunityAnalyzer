@@ -1,0 +1,779 @@
+{% extends "base_app.html" %}
+{% block title %}{{ community.name }} — Community Analyzer{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workspace.css') }}">
+{% endblock %}
+
+{% block topbar_center %}
+<select class="topbar-community-select" onchange="if(this.value) location.href=this.value">
+    <option value="">Select community...</option>
+    {% for c in all_communities %}
+    <option value="{{ url_for('workspace.community_workspace', community_id=c.id) }}"
+            {% if c.id == community.id %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+</select>
+{% endblock %}
+
+{% block content %}
+{# ── Header ──────────────────────────────────────────────────────── #}
+<div class="workspace-header">
+    <h1>{{ community.name }}</h1>
+    <div class="workspace-quick-stats">
+        <div class="workspace-quick-stat">
+            <strong>{{ total_channels }}</strong> channels
+        </div>
+        <div class="workspace-quick-stat">
+            <strong>{{ "{:,}".format(total_subs) }}</strong> subscribers
+        </div>
+        <div class="workspace-quick-stat">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="var(--muted)"><path d="M12 3C7.58 3 4 4.79 4 7v10c0 2.21 3.58 4 8 4s8-1.79 8-4V7c0-2.21-3.58-4-8-4z"/></svg>
+            {{ db_community_display }}
+        </div>
+        <a href="{{ url_for('community.edit', community_id=community.id) }}" class="btn btn-sm btn-outline">Edit</a>
+    </div>
+</div>
+
+{# ── Tab bar ─────────────────────────────────────────────────────── #}
+<div class="workspace-tabs" id="workspace-tabs">
+    <button class="workspace-tab active" data-tab="workflow">Workflow</button>
+    <button class="workspace-tab" data-tab="metrics">Metrics</button>
+    <button class="workspace-tab" data-tab="themes">Themes</button>
+    <button class="workspace-tab" data-tab="commenters">Commenters</button>
+    <button class="workspace-tab" data-tab="reports">Reports</button>
+    <button class="workspace-tab" data-tab="creators">Creators</button>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: WORKFLOW                                                      #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel active" id="panel-workflow">
+
+{# ── Active run ──────────────────────────────────────────────────── #}
+{% if active_run %}
+<div class="section">
+    <div class="run-card active" id="active-run" data-run-id="{{ active_run.id }}" data-step="{{ active_run.current_step }}">
+        <div class="run-status">
+            <span class="status-badge status-{{ active_run.status }}" id="run-badge">{{ active_run.status }}</span>
+            <span class="run-detail" id="run-detail">{{ active_run.progress_detail }}</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div id="quota-counter" style="margin-top:.75rem;display:none">
+            <div style="display:flex;justify-content:space-between;font-size:.8rem;color:#94a3b8;margin-bottom:.25rem">
+                <span>YouTube API quota</span>
+                <span id="quota-text">0 / 10,000</span>
+            </div>
+            <div style="background:#1e293b;border-radius:4px;height:6px;overflow:hidden">
+                <div id="quota-fill" style="height:100%;background:#fb923c;width:0%;transition:width .4s ease"></div>
+            </div>
+        </div>
+        <p class="muted" style="margin-top:.5rem">Started: {{ active_run.started_at }}</p>
+        <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+    {% for qr in queued_runs %}
+    <div style="margin-top:.75rem;padding:.6rem 1rem;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:.9rem">
+        Run #{{ qr.id }} queued — waiting for current run to finish
+    </div>
+    {% endfor %}
+</div>
+{% elif queued_runs %}
+<div class="section">
+    {% for qr in queued_runs %}
+    <div class="run-card active" id="active-run" data-run-id="{{ qr.id }}" data-step="pending">
+        <div class="run-status">
+            <span class="status-badge status-pending" id="run-badge">pending</span>
+            <span class="run-detail" id="run-detail">Waiting to start...</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+        <p class="muted" style="margin-top:.5rem">Queued: {{ qr.started_at }}</p>
+        <div id="progress-log" style="margin-top:1rem;background:#1a1a2e;color:#e0e0e0;font-family:monospace;font-size:0.82rem;padding:0.75rem 1rem;border-radius:6px;max-height:280px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Workflow DAG ────────────────────────────────────────────────── #}
+<div class="section">
+    <h2>Pipeline Status</h2>
+    <div class="wf-dag">
+        <div class="wf-dag-grid">
+            {# Row 1: Tracker Collect (centered, spans middle column) #}
+            <div style="grid-column:1;grid-row:1"></div>
+            <div style="grid-column:2;grid-row:1"></div>
+            <div class="wf-node" data-step="tracker_collect" data-state="{{ tracker_status.state }}" style="grid-column:3;grid-row:1">
+                <div class="wf-node-name">Tracker Collect</div>
+                {% if tracker_status.timestamp %}
+                <div class="wf-node-time">{{ tracker_status.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+                {% if tracker_status.detail %}
+                <div class="wf-node-detail">{{ tracker_status.detail }}</div>
+                {% endif %}
+            </div>
+            <div style="grid-column:4;grid-row:1"></div>
+            <div style="grid-column:5;grid-row:1"></div>
+
+            {# Row 2: connectors down from tracker #}
+            <div style="grid-column:1;grid-row:2"></div>
+            <div class="wf-conn" style="grid-column:2;grid-row:2">&#8601;</div>
+            <div class="wf-conn" style="grid-column:3;grid-row:2">&#8595;</div>
+            <div class="wf-conn" style="grid-column:4;grid-row:2">&#8600;</div>
+            <div style="grid-column:5;grid-row:2"></div>
+
+            {# Row 3: Gossip Collect | Commenter Scoring | Coverage #}
+            <div class="wf-node" data-step="gossip_collect" data-state="{{ pipeline_status.collect.state }}" style="grid-column:1;grid-row:3">
+                <div class="wf-node-name">Gossip Collect</div>
+                {% if pipeline_status.collect.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.collect.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+            </div>
+            <div style="grid-column:2;grid-row:3"></div>
+            <div class="wf-node" data-step="commenter_scoring" data-state="{{ scoring_status.state }}" style="grid-column:3;grid-row:3">
+                <div class="wf-node-name">Commenter Scoring</div>
+                {% if scoring_status.detail %}
+                <div class="wf-node-detail">{{ scoring_status.detail }}</div>
+                {% endif %}
+            </div>
+            <div style="grid-column:4;grid-row:3"></div>
+            <div class="wf-node" data-step="coverage" data-state="fresh" style="grid-column:5;grid-row:3;opacity:0.7">
+                <div class="wf-node-name">Coverage</div>
+                <div class="wf-node-time muted">Display only</div>
+            </div>
+
+            {# Row 4: connectors #}
+            <div class="wf-conn" style="grid-column:1;grid-row:4">&#8595;</div>
+            <div style="grid-column:2;grid-row:4"></div>
+            <div class="wf-conn" style="grid-column:3;grid-row:4">&#8595;</div>
+            <div style="grid-column:4;grid-row:4"></div>
+            <div style="grid-column:5;grid-row:4"></div>
+
+            {# Row 5: Summarize | LLM Tone Scoring #}
+            <div class="wf-node" data-step="summarize" data-state="{{ pipeline_status.summarize.state }}" style="grid-column:1;grid-row:5">
+                <div class="wf-node-name">Summarize</div>
+                {% if pipeline_status.summarize.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.summarize.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+                {% if pipeline_status.summarize.detail %}
+                <div class="wf-node-detail">{{ pipeline_status.summarize.detail }}</div>
+                {% endif %}
+                {% if cost_estimates.get('summarize', {}).get('incremental') %}
+                <div class="wf-node-cost">${{ "%.2f"|format(cost_estimates.summarize.incremental.cost) }}</div>
+                {% endif %}
+            </div>
+            <div style="grid-column:2;grid-row:5"></div>
+            <div class="wf-node" data-step="tone_scoring" data-state="{{ tone_status.state }}" style="grid-column:3;grid-row:5">
+                <div class="wf-node-name">LLM Tone Scoring</div>
+                {% if tone_status.detail %}
+                <div class="wf-node-detail">{{ tone_status.detail }}</div>
+                {% endif %}
+            </div>
+            <div style="grid-column:4;grid-row:5"></div>
+            <div style="grid-column:5;grid-row:5"></div>
+
+            {# Row 6: connector from summarize down #}
+            <div class="wf-conn" style="grid-column:1;grid-row:6">&#8595;</div>
+            <div style="grid-column:2;grid-row:6"></div>
+            <div style="grid-column:3;grid-row:6"></div>
+            <div style="grid-column:4;grid-row:6"></div>
+            <div style="grid-column:5;grid-row:6"></div>
+
+            {# Row 7: Aggregate | (empty) | Themes #}
+            <div class="wf-node" data-step="aggregate" data-state="{{ pipeline_status.aggregate.state }}" style="grid-column:1;grid-row:7">
+                <div class="wf-node-name">Aggregate</div>
+                {% if pipeline_status.aggregate.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.aggregate.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+            </div>
+            <div class="wf-conn" style="grid-column:2;grid-row:7">&#8594;</div>
+            <div style="grid-column:3;grid-row:7"></div>
+            <div class="wf-conn" style="grid-column:4;grid-row:7">&#8594;</div>
+            <div class="wf-node" data-step="themes" data-state="{{ pipeline_status.themes.state }}" style="grid-column:5;grid-row:7">
+                <div class="wf-node-name">Themes</div>
+                {% if pipeline_status.themes.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.themes.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+            </div>
+
+            {# Row 8: connectors #}
+            <div class="wf-conn" style="grid-column:1;grid-row:8">&#8595;</div>
+            <div style="grid-column:2;grid-row:8"></div>
+            <div style="grid-column:3;grid-row:8"></div>
+            <div style="grid-column:4;grid-row:8"></div>
+            <div class="wf-conn" style="grid-column:5;grid-row:8">&#8595;</div>
+
+            {# Row 9: Analyze → Report → Exec Reports #}
+            <div class="wf-node" data-step="analyze" data-state="{{ pipeline_status.analyze.state }}" style="grid-column:1;grid-row:9">
+                <div class="wf-node-name">Analyze</div>
+                {% if pipeline_status.analyze.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.analyze.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+                {% if cost_estimates.get('analyze') %}
+                <div class="wf-node-cost">${{ "%.2f"|format(cost_estimates.analyze.cost) }}</div>
+                {% endif %}
+            </div>
+            <div class="wf-conn" style="grid-column:2;grid-row:9">&#8594;</div>
+            <div class="wf-node" data-step="report" data-state="{{ pipeline_status.report.state }}" style="grid-column:3;grid-row:9">
+                <div class="wf-node-name">Report</div>
+                {% if pipeline_status.report.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.report.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+            </div>
+            <div class="wf-conn" style="grid-column:4;grid-row:9">&#8592;</div>
+            <div class="wf-node" data-step="exec_reports" data-state="{{ pipeline_status.exec_reports.state }}" style="grid-column:5;grid-row:9">
+                <div class="wf-node-name">Exec Reports</div>
+                {% if pipeline_status.exec_reports.timestamp %}
+                <div class="wf-node-time">{{ pipeline_status.exec_reports.timestamp[:16] }}</div>
+                {% else %}
+                <div class="wf-node-time muted">Never</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="wf-legend">
+            <span class="wf-legend-item"><span class="wf-legend-dot wf-legend-dot--fresh"></span> Fresh</span>
+            <span class="wf-legend-item"><span class="wf-legend-dot wf-legend-dot--stale"></span> Stale</span>
+            <span class="wf-legend-item"><span class="wf-legend-dot wf-legend-dot--never"></span> Never run</span>
+            <span class="wf-legend-item"><span class="wf-legend-dot wf-legend-dot--running"></span> Running</span>
+        </div>
+    </div>
+</div>
+
+{# ── Preset cards ────────────────────────────────────────────────── #}
+{% if not active_run and not queued_runs %}
+<div class="section">
+    <h2>Run</h2>
+    <div class="pipe-presets">
+
+        {# Collect Only #}
+        <div class="pipe-preset {% if not presets.collect.enabled %}pipe-preset--disabled{% endif %}">
+            <div class="pipe-preset-header">
+                <strong>Quick Collect</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Tracker"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on" title="Gossip Collect"></span>
+                    <span class="pipe-mini-dot" title="Summarize"></span>
+                    <span class="pipe-mini-dot" title="Aggregate"></span>
+                    <span class="pipe-mini-dot" title="Analyze"></span>
+                    <span class="pipe-mini-dot" title="Report"></span>
+                    <span class="pipe-mini-dot" title="Themes"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Fetch new comments and channel stats. No LLM calls. Use for daily data refresh.</p>
+            {% if presets.collect.reason %}
+            <p class="pipe-preset-reason">{{ presets.collect.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_collect', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Full Pipeline #}
+        <div class="pipe-preset {% if not presets.full_pipeline.enabled %}pipe-preset--disabled{% endif %}">
+            <div class="pipe-preset-header">
+                <strong>Full Pipeline</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Collect + Summarize + Aggregate + Analyze + Report + Themes + Exec Reports.</p>
+            {% if presets.full_pipeline.summarize_cost %}
+            <p class="pipe-preset-cost">Summarize: ~{{ presets.full_pipeline.summarize_cost.videos }} videos &middot; ~${{ "%.2f"|format(presets.full_pipeline.summarize_cost.cost) }} ({{ presets.full_pipeline.summarize_cost.model }})</p>
+            {% endif %}
+            {% if presets.full_pipeline.analyze_cost %}
+            <p class="pipe-preset-cost">Analysis chain: ~${{ "%.2f"|format(presets.full_pipeline.analyze_cost.cost) }} ({{ presets.full_pipeline.analyze_cost.model }})</p>
+            {% endif %}
+            {% if presets.full_pipeline.reason %}
+            <p class="pipe-preset-reason">{{ presets.full_pipeline.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_run', community_id=community.id) }}">
+                <button type="submit" class="btn btn-primary btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Re-analyze #}
+        <div class="pipe-preset {% if not presets.reanalyze.enabled %}pipe-preset--disabled{% endif %}">
+            <div class="pipe-preset-header">
+                <strong>Re-analyze</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot"></span>
+                    <span class="pipe-mini-dot"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Aggregate + Analyze + Report + Themes + Exec. Use after changing aliases or channel list.</p>
+            {% if presets.reanalyze.analyze_cost %}
+            <p class="pipe-preset-cost">Analysis chain: ~${{ "%.2f"|format(presets.reanalyze.analyze_cost.cost) }} ({{ presets.reanalyze.analyze_cost.model }})</p>
+            {% endif %}
+            {% if presets.reanalyze.reason %}
+            <p class="pipe-preset-reason">{{ presets.reanalyze.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_reanalyze', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {# Re-summarize All #}
+        <div class="pipe-preset {% if not presets.resummarize_all.enabled %}pipe-preset--disabled{% endif %}">
+            <div class="pipe-preset-header">
+                <strong>Re-summarize All</strong>
+                <div class="pipe-mini-dots">
+                    <span class="pipe-mini-dot"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                    <span class="pipe-mini-dot pipe-mini-dot--on"></span>
+                </div>
+            </div>
+            <p class="pipe-preset-desc">Force re-summarize all videos + full downstream chain. Use after changing LLM model.</p>
+            {% if presets.resummarize_all.summarize_cost %}
+            <p class="pipe-preset-cost">Summarize: ~{{ presets.resummarize_all.summarize_cost.videos }} videos &middot; ~${{ "%.2f"|format(presets.resummarize_all.summarize_cost.cost) }} ({{ presets.resummarize_all.summarize_cost.model }})</p>
+            {% endif %}
+            {% if presets.resummarize_all.analyze_cost %}
+            <p class="pipe-preset-cost">Analysis chain: ~${{ "%.2f"|format(presets.resummarize_all.analyze_cost.cost) }} ({{ presets.resummarize_all.analyze_cost.model }})</p>
+            {% endif %}
+            {% if presets.resummarize_all.reason %}
+            <p class="pipe-preset-reason">{{ presets.resummarize_all.reason }}</p>
+            {% else %}
+            <form method="POST" action="{{ url_for('gossip.start_resummarize_all', community_id=community.id) }}">
+                <button type="submit" class="btn btn-outline btn-sm">Run</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Run history ─────────────────────────────────────────────────── #}
+<div class="section">
+    <h2>Run History</h2>
+    {% if history %}
+    <table class="data-table">
+        <thead>
+            <tr><th>ID</th><th>Status</th><th>Started</th><th>Completed</th><th>LLM</th><th>Report</th></tr>
+        </thead>
+        <tbody>
+            {% for run in history %}
+            <tr>
+                <td>#{{ run.id }}</td>
+                <td><span class="status-badge status-{{ run.status }}">{{ run.status }}</span></td>
+                <td>{{ (run.started_at or '')[:16] }}</td>
+                <td>{{ (run.completed_at or '')[:16] }}</td>
+                <td>{{ run.llm_backend or '-' }}</td>
+                <td>
+                    {% if run.status == 'complete' and run.analysis_id %}
+                    <a href="{{ url_for('gossip.report', analysis_id=run.analysis_id) }}" class="btn btn-sm">View</a>
+                    {% else %}-{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No runs yet.</p>
+    {% endif %}
+</div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: METRICS                                                       #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-metrics">
+    <div class="section">
+        <p class="muted">
+            <a href="{{ url_for('tracker.dashboard', community_id=community.id) }}" class="btn btn-primary btn-sm">Open Full Dashboard</a>
+            &nbsp; Full metrics dashboard with charts and collection controls.
+        </p>
+    </div>
+
+    {# Coverage timeline #}
+    <div class="coverage-section" id="coverage-section">
+        <h3>Content Coverage Timeline (5 years)</h3>
+        <div id="coverage-loading" class="muted">Loading coverage data...</div>
+        <div id="coverage-grid" class="coverage-grid" style="display:none"></div>
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: THEMES                                                        #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-themes">
+    <div class="section">
+        <div class="page-header">
+            <h2>Themes ({{ themes|length }})</h2>
+            <div style="display:flex;gap:.5rem">
+                <form method="POST" action="{{ url_for('themes.recompute', community_id=community.id) }}">
+                    <button type="submit" class="btn btn-outline btn-sm">Recompute Themes</button>
+                </form>
+            </div>
+        </div>
+        {% if themes %}
+        <div class="card-grid">
+            {% for t in themes %}
+            <a href="{{ url_for('themes.detail', theme_id=t.id) }}" class="card" style="text-decoration:none">
+                <div class="card-header">
+                    {% if t.gossip_type %}
+                    <span class="badge" style="margin-bottom:.3rem">{{ t.gossip_type }}</span>
+                    {% endif %}
+                    <h3 style="font-size:0.95rem">{{ t.title or 'Untitled Theme' }}</h3>
+                </div>
+                {% if t.description %}
+                <p class="card-desc" style="margin:.5rem 0">{{ t.description[:120] }}{% if t.description|length > 120 %}...{% endif %}</p>
+                {% endif %}
+                <div class="card-meta">
+                    <span>Evidence: {{ t.total_evidence }}</span>
+                    <span>{{ t.first_seen_at[:10] if t.first_seen_at else '?' }} — {{ t.last_seen_at[:10] if t.last_seen_at else '?' }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">No themes yet. Run the pipeline first, then compute themes.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: COMMENTERS                                                    #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-commenters">
+    <div class="section">
+        <div class="page-header">
+            <h2>Commenters ({{ commenters|length }})</h2>
+            <div style="display:flex;gap:.5rem">
+                <a href="{{ url_for('gossip.commenters', community_id=community.id) }}" class="btn btn-outline btn-sm">Full Commenter View</a>
+            </div>
+        </div>
+        {% if commenters %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Tier</th>
+                    <th>Name</th>
+                    <th>Score</th>
+                    <th>Comments</th>
+                    <th>Channels</th>
+                    <th>Likes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in commenters[:50] %}
+                <tr>
+                    <td><span class="tier-badge tier-{{ c.tier }}">{{ c.tier }}</span></td>
+                    <td>
+                        <a href="{{ url_for('gossip.commenter_detail', community_id=community.id, author_channel_id=c.author_channel_id) }}">
+                            {{ c.author_name[:30] }}
+                        </a>
+                    </td>
+                    <td>{{ "%.0f"|format(c.quality_score * 100) }}%</td>
+                    <td>{{ c.comment_count }}</td>
+                    <td>{{ c.channel_count }}</td>
+                    <td>{{ c.total_likes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if commenters|length > 50 %}
+        <p class="muted" style="margin-top:.5rem">Showing top 50 of {{ commenters|length }}. <a href="{{ url_for('gossip.commenters', community_id=community.id) }}">View all</a></p>
+        {% endif %}
+        {% else %}
+        <p class="muted">No commenter scores yet. Run the pipeline first.</p>
+        {% endif %}
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: REPORTS                                                        #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-reports">
+    <div class="section">
+        <h2>Reports</h2>
+        <div class="reports-grid">
+            <div class="report-card">
+                <h3>Gossip Report</h3>
+                {% if reports.gossip_report %}
+                <p class="report-card-status available">Available — {{ reports.gossip_report.date[:16] if reports.gossip_report.date else 'N/A' }}</p>
+                <div class="report-card-actions">
+                    <a href="{{ url_for('gossip.report', analysis_id=reports.gossip_report.analysis_id) }}" class="btn btn-sm">View</a>
+                </div>
+                {% else %}
+                <p class="report-card-status">Not generated yet</p>
+                <p class="muted" style="font-size:.8rem">Run the Full Pipeline to generate.</p>
+                {% endif %}
+            </div>
+
+            <div class="report-card">
+                <h3>Executive Summary</h3>
+                {% if reports.executive_summary %}
+                <p class="report-card-status available">Available — {{ reports.executive_summary.date[:16] if reports.executive_summary.date else 'N/A' }}</p>
+                <div class="report-card-actions">
+                    <a href="{{ url_for('gossip.executive_summary', community_id=community.id) }}" class="btn btn-sm">View</a>
+                </div>
+                {% else %}
+                <p class="report-card-status">Not generated yet</p>
+                <p class="muted" style="font-size:.8rem">Generated automatically at the end of Full Pipeline.</p>
+                {% endif %}
+            </div>
+
+            <div class="report-card">
+                <h3>Top Insights</h3>
+                {% if reports.top_insights %}
+                <p class="report-card-status available">Available — {{ reports.top_insights.date[:16] if reports.top_insights.date else 'N/A' }}</p>
+                <div class="report-card-actions">
+                    <a href="{{ url_for('gossip.top_insights', community_id=community.id) }}" class="btn btn-sm">View</a>
+                </div>
+                {% else %}
+                <p class="report-card-status">Not generated yet</p>
+                <p class="muted" style="font-size:.8rem">Generated automatically at the end of Full Pipeline.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# TAB: CREATORS                                                      #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<div class="workspace-panel" id="panel-creators">
+    <div class="section">
+        <h2>Channels ({{ channels|length }})</h2>
+        {% if channels %}
+        <div class="creators-grid">
+            {% for ch in channels %}
+            <a href="{{ url_for('workspace.creator_view', community_id=community.id, channel_id=ch.channel_id) }}" class="creator-card">
+                {% if ch.thumbnail_url %}
+                <img src="{{ ch.thumbnail_url }}" class="creator-card-thumb" alt="" loading="lazy">
+                {% else %}
+                <div class="creator-card-thumb"></div>
+                {% endif %}
+                <div class="creator-card-info">
+                    <h4>{{ ch.channel_name }}</h4>
+                    <p>{{ ch.handle or '' }} &middot; {{ "{:,}".format(ch.subscriber_count or 0) }} subs</p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">No channels in this community. <a href="{{ url_for('community.edit', community_id=community.id) }}">Add channels</a></p>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Tab switching
+(function() {
+    const tabs = document.querySelectorAll('.workspace-tab');
+    const panels = document.querySelectorAll('.workspace-panel');
+
+    function activateTab(tabName) {
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+        panels.forEach(p => p.classList.toggle('active', p.id === 'panel-' + tabName));
+        // Lazy-load coverage timeline when metrics tab is first shown
+        if (tabName === 'metrics' && !window._coverageLoaded) {
+            window._coverageLoaded = true;
+            loadCoverageTimeline();
+        }
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const name = tab.dataset.tab;
+            history.replaceState(null, '', '#' + name);
+            activateTab(name);
+        });
+    });
+
+    // Handle hash on load
+    const hash = location.hash.replace('#', '');
+    if (hash && document.getElementById('panel-' + hash)) {
+        activateTab(hash);
+    }
+})();
+
+// Coverage timeline loader
+function loadCoverageTimeline() {
+    const grid = document.getElementById('coverage-grid');
+    const loading = document.getElementById('coverage-loading');
+    fetch('{{ url_for("workspace.coverage_timeline", community_id=community.id) }}')
+        .then(r => r.json())
+        .then(data => {
+            loading.style.display = 'none';
+            grid.style.display = 'block';
+            renderCoverage(data.channels, grid);
+        })
+        .catch(err => {
+            loading.textContent = 'Failed to load coverage data.';
+        });
+}
+
+function renderCoverage(channels, container) {
+    if (!channels.length) {
+        container.innerHTML = '<p class="muted">No data yet.</p>';
+        return;
+    }
+
+    // Generate 60 months
+    const months = [];
+    const now = new Date();
+    for (let i = 59; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'));
+    }
+
+    // Month labels (show every 6th)
+    let labelsHtml = '<div class="coverage-month-labels">';
+    months.forEach((m, i) => {
+        const label = (i % 6 === 0) ? m.slice(2) : '';
+        labelsHtml += `<div class="coverage-month-label">${label}</div>`;
+    });
+    labelsHtml += '</div>';
+    container.innerHTML = labelsHtml;
+
+    channels.forEach(ch => {
+        const row = document.createElement('div');
+        row.className = 'coverage-channel-row';
+
+        const nameEl = document.createElement('div');
+        nameEl.className = 'coverage-channel-name';
+        nameEl.title = ch.channel_name;
+        nameEl.textContent = ch.channel_name;
+        row.appendChild(nameEl);
+
+        const cellsEl = document.createElement('div');
+        cellsEl.className = 'coverage-cells';
+
+        // Find max for density scaling
+        let maxComments = 0;
+        Object.values(ch.months).forEach(v => { if (v.comments > maxComments) maxComments = v.comments; });
+
+        months.forEach(m => {
+            const cell = document.createElement('div');
+            cell.className = 'coverage-cell';
+            const d = ch.months[m];
+            let density = 0;
+            if (d) {
+                const ratio = maxComments > 0 ? d.comments / maxComments : 0;
+                density = ratio > 0.75 ? 4 : ratio > 0.5 ? 3 : ratio > 0.25 ? 2 : 1;
+            }
+            cell.setAttribute('data-density', density);
+            cell.title = m + (d ? `: ${d.comments} comments, ${d.videos} videos` : ': no data');
+
+            // Clickable gap
+            if (density === 0) {
+                cell.addEventListener('click', () => {
+                    if (confirm(`Collect comments for ${ch.channel_name} for ${m}?`)) {
+                        fetch('{{ url_for("workspace.collect_range", community_id=community.id) }}', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                channel_id: ch.channel_id,
+                                date_from: m + '-01',
+                                date_to: m + '-28'
+                            })
+                        }).then(r => r.json()).then(d => {
+                            if (d.ok) cell.style.background = 'rgba(124,77,255,0.3)';
+                        });
+                    }
+                });
+            }
+
+            cellsEl.appendChild(cell);
+        });
+
+        row.appendChild(cellsEl);
+        container.appendChild(row);
+    });
+}
+
+// Run status polling (same as existing gossip_runs.html)
+(function() {
+    const el = document.getElementById('active-run');
+    if (!el) return;
+    const runId = el.dataset.runId;
+    const badge = document.getElementById('run-badge');
+    const detail = document.getElementById('run-detail');
+    const fill = document.getElementById('progress-fill');
+    const log = document.getElementById('progress-log');
+    const quotaCounter = document.getElementById('quota-counter');
+    const quotaText = document.getElementById('quota-text');
+    const quotaFill = document.getElementById('quota-fill');
+
+    const STEPS = ['collecting','summarizing','aggregating','analyzing','reporting'];
+
+    function poll() {
+        fetch('{{ url_for("gossip.run_status", run_id=0) }}'.replace('/0/', '/' + runId + '/'))
+            .then(r => r.json())
+            .then(data => {
+                badge.textContent = data.status;
+                badge.className = 'status-badge status-' + data.status;
+                detail.textContent = data.progress_detail || '';
+
+                // Progress bar
+                const idx = STEPS.indexOf(data.status);
+                if (idx >= 0) fill.style.width = ((idx + 1) / STEPS.length * 100) + '%';
+
+                // Progress log
+                if (data.progress_log) {
+                    const lines = data.progress_log.split('\n').filter(Boolean);
+                    let html = '';
+                    lines.forEach(line => {
+                        const parts = line.split('\t');
+                        if (parts[0] === 'channel') html += '<b>' + parts[1] + '</b>\n';
+                        else if (parts[0] === 'video') html += '  ' + parts[1] + '\n';
+                        else html += parts.join(' ') + '\n';
+                    });
+                    log.innerHTML = html;
+                    log.scrollTop = log.scrollHeight;
+                }
+
+                // Quota
+                if (data.quota_units) {
+                    quotaCounter.style.display = 'block';
+                    quotaText.textContent = data.quota_units.toLocaleString() + ' / 10,000';
+                    quotaFill.style.width = Math.min(100, data.quota_units / 100) + '%';
+                }
+
+                if (data.status === 'complete' || data.status === 'failed') {
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    setTimeout(poll, 2000);
+                }
+            })
+            .catch(() => setTimeout(poll, 5000));
+    }
+    poll();
+})();
+</script>
+{% endblock %}

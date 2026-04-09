@@ -10,10 +10,10 @@
 <body>
     <nav class="sidebar">
         <div class="sidebar-header">
-            <h2><a href="{{ url_for('main.home') }}">Community Analyzer</a></h2>
+            <h2><a href="{{ url_for('main.hub') }}">Community Analyzer</a></h2>
         </div>
         <ul class="nav-links">
-            <li><a href="{{ url_for('main.home') }}" class="{% if request.endpoint == 'main.home' %}active{% endif %}">Home</a></li>
+            <li><a href="{{ url_for('main.hub') }}" class="{% if request.endpoint == 'main.home' %}active{% endif %}">Home</a></li>
             <li><a href="{{ url_for('community.manage') }}" class="{% if request.endpoint == 'community.manage' %}active{% endif %}">Manage</a></li>
             <li><a href="{{ url_for('discovery.discovery_page') }}" class="{% if request.blueprint == 'discovery' %}active{% endif %}">Discover</a></li>
             <li><a href="{{ url_for('settings.settings_page') }}" class="{% if request.endpoint == 'settings.settings_page' %}active{% endif %}">Settings</a></li>

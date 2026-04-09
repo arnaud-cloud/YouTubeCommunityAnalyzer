@@ -25,7 +25,7 @@ def dashboard(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     channels = conn.execute("""
         SELECT ch.channel_id, ch.channel_name, ch.handle, ch.thumbnail_url

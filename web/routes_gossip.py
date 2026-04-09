@@ -257,7 +257,7 @@ def runs(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     # Currently running (non-pending) run
     active_run = conn.execute("""
@@ -514,7 +514,7 @@ def retry_report(run_id):
     if not run:
         conn.close()
         flash("Run not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     analysis_id = run["analysis_id"]
     if not analysis_id:
@@ -552,7 +552,7 @@ def report(analysis_id):
     except ValueError as e:
         conn.close()
         flash(str(e), "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     conn.close()
     return render_template(
@@ -572,7 +572,7 @@ def executive_summary(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     regenerate = request.args.get("regenerate") == "1"
     cached = None if regenerate else get_cached_report(
@@ -611,7 +611,7 @@ def top_insights(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     min_evidence = request.args.get("min_evidence", 10, type=int)
     regenerate = request.args.get("regenerate") == "1"
@@ -655,7 +655,7 @@ def commenters(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     page = request.args.get("page", 1, type=int)
     per_page = 50
@@ -943,5 +943,5 @@ def executive_report_pdf(report_id):
     conn.close()
     if not report:
         flash("Report not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
     return report["report_html"]

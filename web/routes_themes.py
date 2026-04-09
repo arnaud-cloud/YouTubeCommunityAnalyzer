@@ -76,7 +76,7 @@ def browse(community_id):
     if not community:
         conn.close()
         flash("Community not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     # Themes sorted by most recently active
     theme_rows = conn.execute(
@@ -147,7 +147,7 @@ def detail(theme_id):
     if not theme:
         conn.close()
         flash("Theme not found.", "error")
-        return redirect(url_for("main.home"))
+        return redirect(url_for("main.hub"))
 
     community = conn.execute(
         "SELECT * FROM communities WHERE id = ?", (theme["community_id"],)

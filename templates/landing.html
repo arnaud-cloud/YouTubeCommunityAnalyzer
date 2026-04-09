@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Community Analyzer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
+</head>
+<body>
+    <div class="landing">
+        <div class="landing-logo">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+            </svg>
+        </div>
+        <h1>Community Analyzer</h1>
+        <p class="landing-subtitle">
+            Track YouTube communities, extract gossip with AI,
+            score commenters, and generate executive reports.
+        </p>
+        <a href="{{ url_for('main.hub') }}" class="landing-start">Get Started</a>
+        <div class="landing-footer">YouTube Community Analyzer</div>
+    </div>
+</body>
+</html>

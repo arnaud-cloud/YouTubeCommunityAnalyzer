@@ -1,0 +1,242 @@
+{% extends "base_app.html" %}
+{% block title %}{{ channel.channel_name }} — {{ community.name }} — Community Analyzer{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/workspace.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block topbar_center %}
+<select class="topbar-community-select" onchange="if(this.value) location.href=this.value">
+    {% for c in all_communities %}
+    <option value="{{ url_for('workspace.community_workspace', community_id=c.id) }}"
+            {% if c.id == community.id %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+</select>
+{% endblock %}
+
+{% block content %}
+{# ── Back link ───────────────────────────────────────────────────── #}
+<p style="margin-bottom:1rem">
+    <a href="{{ url_for('workspace.community_workspace', community_id=community.id) }}#creators">&larr; Back to {{ community.name }}</a>
+</p>
+
+{# ── Header ──────────────────────────────────────────────────────── #}
+<div class="creator-header">
+    {% if channel.thumbnail_url %}
+    <img src="{{ channel.thumbnail_url }}" class="creator-header-thumb" alt="">
+    {% else %}
+    <div class="creator-header-thumb"></div>
+    {% endif %}
+    <div class="creator-header-info">
+        <h1>{{ channel.channel_name }}</h1>
+        {% if channel.handle %}
+        <p class="creator-header-handle">{{ channel.handle }}</p>
+        {% endif %}
+        <div class="creator-header-stats">
+            {% if snapshot %}
+            <div class="creator-header-stat">
+                <strong>{{ "{:,}".format(snapshot.subscriber_count or 0) }}</strong>
+                <small>Subscribers</small>
+            </div>
+            <div class="creator-header-stat">
+                <strong>{{ "{:,}".format(snapshot.view_count or 0) }}</strong>
+                <small>Views</small>
+            </div>
+            <div class="creator-header-stat">
+                <strong>{{ "{:,}".format(snapshot.video_count or 0) }}</strong>
+                <small>Videos</small>
+            </div>
+            {% endif %}
+            {% if commenter_score %}
+            <div class="creator-header-stat">
+                <span class="tier-badge tier-{{ commenter_score.tier }}">{{ commenter_score.tier }}</span>
+                <small>{{ "%.0f"|format(commenter_score.quality_score * 100) }}% quality</small>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% if channel.custom_url %}
+    <a href="https://youtube.com/{{ channel.custom_url }}" target="_blank" class="btn btn-outline btn-sm" style="align-self:flex-start">YouTube &nearr;</a>
+    {% endif %}
+</div>
+
+{# ── Metrics Over Time ──────────────────────────────────────────── #}
+{% if snapshots|length > 1 %}
+<div class="creator-section">
+    <h2>Metrics Over Time</h2>
+    <div class="chart-row">
+        <div class="chart-container half">
+            <h2>Subscribers</h2>
+            <canvas id="chart-subs" height="200"></canvas>
+        </div>
+        <div class="chart-container half">
+            <h2>Total Views</h2>
+            <canvas id="chart-views" height="200"></canvas>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Gossip About This Creator ──────────────────────────────────── #}
+{% if gossip_items %}
+<div class="creator-section">
+    <h2>Gossip ({{ gossip_items|length }})</h2>
+    {% for gi in gossip_items %}
+    <div class="gossip-card">
+        <span class="gossip-card-type badge">{{ gi.gossip_type }}</span>
+        <p class="gossip-card-claim">{{ gi.claim }}</p>
+        <p class="gossip-card-meta">
+            Confidence: {{ "%.0f"|format(gi.confidence * 100) }}% &middot;
+            {{ gi.source_channel }} &middot;
+            {{ gi.video_title[:60] }}{% if gi.video_title|length > 60 %}...{% endif %}
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Themes Involving This Creator ──────────────────────────────── #}
+{% if themes %}
+<div class="creator-section">
+    <h2>Themes ({{ themes|length }})</h2>
+    <div class="card-grid">
+        {% for t in themes %}
+        <a href="{{ url_for('themes.detail', theme_id=t.id) }}" class="card" style="text-decoration:none">
+            <div class="card-header">
+                {% if t.gossip_type %}
+                <span class="badge" style="margin-bottom:.3rem">{{ t.gossip_type }}</span>
+                {% endif %}
+                <h3 style="font-size:0.95rem">{{ t.title or 'Untitled Theme' }}</h3>
+            </div>
+            <div class="card-meta">
+                <span>Evidence: {{ t.total_evidence }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── Commenter Behavior ─────────────────────────────────────────── #}
+{% if commenter_score %}
+<div class="creator-section">
+    <h2>Commenter Credibility</h2>
+    <div class="stat-tiles" style="grid-template-columns:repeat(auto-fit, minmax(120px, 1fr))">
+        <div class="stat-tile">
+            <div class="stat-value">{{ "%.0f"|format(commenter_score.quality_score * 100) }}%</div>
+            <div class="stat-label">Quality</div>
+        </div>
+        {% if commenter_score.llm_tone_score is not none %}
+        <div class="stat-tile">
+            <div class="stat-value">{{ "%.0f"|format(commenter_score.llm_tone_score * 100) }}%</div>
+            <div class="stat-label">LLM Tone</div>
+        </div>
+        {% endif %}
+        <div class="stat-tile">
+            <div class="stat-value">{{ commenter_score.comment_count }}</div>
+            <div class="stat-label">Comments</div>
+        </div>
+        <div class="stat-tile">
+            <div class="stat-value">{{ commenter_score.channel_count }}</div>
+            <div class="stat-label">Channels</div>
+        </div>
+        <div class="stat-tile">
+            <div class="stat-value">{{ "%.1f"|format(commenter_score.reply_ratio * 100) }}%</div>
+            <div class="stat-label">Reply Ratio</div>
+        </div>
+        <div class="stat-tile">
+            <div class="stat-value">{{ commenter_score.total_likes }}</div>
+            <div class="stat-label">Total Likes</div>
+        </div>
+    </div>
+    {% if commenter_score.llm_tone_reason %}
+    <div style="margin-top:1rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem">
+        <h3 style="font-size:.9rem;color:var(--muted);margin-bottom:.5rem">LLM Assessment</h3>
+        <p style="font-size:.85rem">{{ commenter_score.llm_tone_reason }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── Videos Catalog ──────────────────────────────────────────────── #}
+{% if videos %}
+<div class="creator-section">
+    <h2>Videos ({{ videos|length }})</h2>
+    <div style="overflow-x:auto">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Published</th>
+                <th>Views</th>
+                <th>Likes</th>
+                <th>Comments</th>
+                <th>Summary</th>
+                <th>Gossip</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for v in videos %}
+            <tr>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ v.title }}">{{ v.title }}</td>
+                <td>{{ (v.published_at or '')[:10] }}</td>
+                <td>{{ "{:,}".format(v.latest_views or 0) }}</td>
+                <td>{{ "{:,}".format(v.latest_likes or 0) }}</td>
+                <td>{{ "{:,}".format(v.latest_comments or 0) }}</td>
+                <td>{% if v.has_summary %}<span style="color:var(--success)">Yes</span>{% else %}<span class="muted">No</span>{% endif %}</td>
+                <td>{{ v.gossip_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if snapshots|length > 1 %}
+<script>
+const snapshots = {{ snapshots | tojson }};
+const labels = snapshots.map(s => s.snapshot_date);
+const chartOpts = {
+    responsive: true,
+    plugins: {legend: {display: false}},
+    scales: {
+        x: {ticks: {color: '#9090b0', maxTicksLimit: 10}},
+        y: {ticks: {color: '#9090b0'}, grid: {color: 'rgba(42,42,74,0.5)'}}
+    }
+};
+
+new Chart(document.getElementById('chart-subs'), {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [{
+            data: snapshots.map(s => s.subscriber_count),
+            borderColor: '#7c4dff',
+            backgroundColor: 'rgba(124,77,255,0.1)',
+            fill: true, tension: 0.3, pointRadius: 2
+        }]
+    },
+    options: chartOpts
+});
+
+new Chart(document.getElementById('chart-views'), {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: [{
+            data: snapshots.map(s => s.view_count),
+            borderColor: '#2ecc71',
+            backgroundColor: 'rgba(46,204,113,0.1)',
+            fill: true, tension: 0.3, pointRadius: 2
+        }]
+    },
+    options: chartOpts
+});
+</script>
+{% endif %}
+{% endblock %}

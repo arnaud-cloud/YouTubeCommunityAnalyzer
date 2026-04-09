@@ -1,5 +1,22 @@
-{% extends "base.html" %}
+{% extends "base_app.html" %}
 {% block title %}Settings — Community Analyzer{% endblock %}
+
+{% block head %}
+<style>
+.stabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem; }
+.stab { padding: 0.5rem 1rem; font-size: 0.88rem; color: var(--muted); cursor: pointer; border: none; background: none; font-family: inherit; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color 0.15s, border-color 0.15s; }
+.stab:hover { color: var(--text); }
+.stab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.spanel { display: none; }
+.spanel.active { display: block; }
+.settings-form { max-width: 960px; }
+.llm-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.llm-card h3 { font-size: 0.9rem; color: var(--accent); margin-bottom: 0.7rem; }
+.llm-card .form-row { margin-bottom: 0; }
+.llm-card .form-group { margin-bottom: 0.5rem; }
+.settings-save { position: sticky; bottom: 1rem; z-index: 10; padding-top: 1rem; background: var(--bg); }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -8,202 +25,96 @@
 
 <form method="POST" class="settings-form">
 
-    <div class="settings-section">
-        <h2>YouTube API</h2>
+<div class="stabs">
+    <button type="button" class="stab active" data-stab="api">API Keys</button>
+    <button type="button" class="stab" data-stab="llm">LLM Models</button>
+    <button type="button" class="stab" data-stab="collection">Collection</button>
+    <button type="button" class="stab" data-stab="advanced">Advanced</button>
+</div>
+
+{# ── Tab: API Keys ───────────────────────────────────────────────── #}
+<div class="spanel active" id="stab-api">
+    <div class="form-row">
         <div class="form-group">
             <label for="youtube_api_key">YouTube API Key</label>
             <input type="password" id="youtube_api_key" name="youtube_api_key" value="{{ settings.youtube_api_key }}" placeholder="AIza...">
-            <small>Get one at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></small>
+            <small><a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></small>
+        </div>
+        <div class="form-group">
+            <label for="anthropic_api_key">Anthropic API Key</label>
+            <input type="password" id="anthropic_api_key" name="anthropic_api_key" value="{{ settings.anthropic_api_key }}" placeholder="sk-ant-...">
         </div>
     </div>
-
-    <div class="settings-section">
-        <h2>LLM — Summarize Step (batch gossip extraction)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_summarize_backend">Backend</label>
-                <select id="llm_summarize_backend" name="llm_summarize_backend">
-                    <option value="ollama" {% if settings.llm_summarize_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-                    <option value="anthropic" {% if settings.llm_summarize_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="llm_summarize_max_tokens">Max Tokens (per batch call)</label>
-                <input type="number" id="llm_summarize_max_tokens" name="llm_summarize_max_tokens" value="{{ settings.llm_summarize_max_tokens }}">
-            </div>
-            <div class="form-group">
-                <label for="llm_summarize_buffer_chars">Input Buffer (chars)</label>
-                <input type="number" id="llm_summarize_buffer_chars" name="llm_summarize_buffer_chars" value="{{ settings.llm_summarize_buffer_chars }}">
-                <small>Max chars of comments per LLM call. Lower for local GPU, higher for cloud. Default: 120000.</small>
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_summarize_anthropic_model">Anthropic Model</label>
-                <input type="text" id="llm_summarize_anthropic_model" name="llm_summarize_anthropic_model" value="{{ settings.llm_summarize_anthropic_model }}">
-            </div>
-            <div class="form-group">
-                <label for="llm_summarize_ollama_model">Ollama Model</label>
-                <input type="text" id="llm_summarize_ollama_model" name="llm_summarize_ollama_model" value="{{ settings.llm_summarize_ollama_model }}">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
-        <h2>LLM — Analyze Step (cross-channel narrative synthesis)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_analyze_backend">Backend</label>
-                <select id="llm_analyze_backend" name="llm_analyze_backend">
-                    <option value="ollama" {% if settings.llm_analyze_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-                    <option value="anthropic" {% if settings.llm_analyze_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="llm_analyze_max_tokens">Max Tokens</label>
-                <input type="number" id="llm_analyze_max_tokens" name="llm_analyze_max_tokens" value="{{ settings.llm_analyze_max_tokens }}">
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_analyze_anthropic_model">Anthropic Model</label>
-                <input type="text" id="llm_analyze_anthropic_model" name="llm_analyze_anthropic_model" value="{{ settings.llm_analyze_anthropic_model }}">
-            </div>
-            <div class="form-group">
-                <label for="llm_analyze_ollama_model">Ollama Model</label>
-                <input type="text" id="llm_analyze_ollama_model" name="llm_analyze_ollama_model" value="{{ settings.llm_analyze_ollama_model }}">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
-        <h2>LLM — Common</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="anthropic_api_key">Anthropic API Key</label>
-                <input type="password" id="anthropic_api_key" name="anthropic_api_key" value="{{ settings.anthropic_api_key }}" placeholder="sk-ant-...">
-            </div>
-            <div class="form-group">
-                <label for="ollama_base_url">Ollama Base URL</label>
-                <input type="text" id="ollama_base_url" name="ollama_base_url" value="{{ settings.ollama_base_url }}">
-            </div>
-            <div class="form-group">
-                <label for="llm_temperature">Temperature</label>
-                <input type="number" id="llm_temperature" name="llm_temperature" value="{{ settings.llm_temperature }}" step="0.1" min="0" max="2">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
-        <h2>LLM — Discovery Step (community source suggestions)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_discovery_backend">Backend</label>
-                <select id="llm_discovery_backend" name="llm_discovery_backend">
-                    <option value="anthropic" {% if settings.llm_discovery_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                    <option value="ollama" {% if settings.llm_discovery_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="llm_discovery_anthropic_model">Anthropic Model</label>
-                <input type="text" id="llm_discovery_anthropic_model" name="llm_discovery_anthropic_model" value="{{ settings.llm_discovery_anthropic_model }}">
-                <small>Haiku is recommended — the task is simple and cheap.</small>
-            </div>
-            <div class="form-group">
-                <label for="llm_discovery_ollama_model">Ollama Model</label>
-                <input type="text" id="llm_discovery_ollama_model" name="llm_discovery_ollama_model" value="{{ settings.llm_discovery_ollama_model }}">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
-        <h2>LLM — Tone Scoring Step (commenter credibility)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_tone_backend">Backend</label>
-                <select id="llm_tone_backend" name="llm_tone_backend">
-                    <option value="ollama" {% if settings.llm_tone_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-                    <option value="anthropic" {% if settings.llm_tone_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="llm_tone_anthropic_model">Anthropic Model</label>
-                <input type="text" id="llm_tone_anthropic_model" name="llm_tone_anthropic_model" value="{{ settings.llm_tone_anthropic_model }}">
-                <small>Haiku is recommended — batches of 10 commenters per call.</small>
-            </div>
-            <div class="form-group">
-                <label for="llm_tone_ollama_model">Ollama Model</label>
-                <input type="text" id="llm_tone_ollama_model" name="llm_tone_ollama_model" value="{{ settings.llm_tone_ollama_model }}">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
-        <h2>LLM — Deep Creator Analysis (defensiveness &amp; bragging)</h2>
-        <div class="form-row">
-            <div class="form-group">
-                <label for="llm_creator_backend">Backend</label>
-                <select id="llm_creator_backend" name="llm_creator_backend">
-                    <option value="ollama" {% if settings.llm_creator_backend == 'ollama' %}selected{% endif %}>Ollama (local)</option>
-                    <option value="anthropic" {% if settings.llm_creator_backend == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="llm_creator_anthropic_model">Anthropic Model</label>
-                <input type="text" id="llm_creator_anthropic_model" name="llm_creator_anthropic_model" value="{{ settings.llm_creator_anthropic_model }}">
-                <small>Haiku recommended — nuanced per-creator analysis with convergence detection.</small>
-            </div>
-            <div class="form-group">
-                <label for="llm_creator_ollama_model">Ollama Model</label>
-                <input type="text" id="llm_creator_ollama_model" name="llm_creator_ollama_model" value="{{ settings.llm_creator_ollama_model }}">
-            </div>
-        </div>
-    </div>
-
-    <div class="settings-section">
+    <div class="settings-section" style="margin-top:1rem">
         <h2>Reddit API</h2>
         <div class="form-row">
             <div class="form-group">
                 <label for="reddit_client_id">Client ID</label>
-                <input type="text" id="reddit_client_id" name="reddit_client_id" value="{{ settings.reddit_client_id }}" placeholder="e.g. abc123def456">
+                <input type="text" id="reddit_client_id" name="reddit_client_id" value="{{ settings.reddit_client_id }}" placeholder="abc123def456">
             </div>
             <div class="form-group">
                 <label for="reddit_client_secret">Client Secret</label>
-                <input type="password" id="reddit_client_secret" name="reddit_client_secret" value="{{ settings.reddit_client_secret }}" placeholder="secret...">
+                <input type="password" id="reddit_client_secret" name="reddit_client_secret" value="{{ settings.reddit_client_secret }}">
             </div>
             <div class="form-group">
                 <label for="reddit_user_agent">User Agent</label>
                 <input type="text" id="reddit_user_agent" name="reddit_user_agent" value="{{ settings.reddit_user_agent }}">
             </div>
         </div>
+        <small>Create a "script" app at <a href="https://www.reddit.com/prefs/apps" target="_blank">reddit.com/prefs/apps</a></small>
+    </div>
+</div>
+
+{# ── Tab: LLM Models ────────────────────────────────────────────── #}
+<div class="spanel" id="stab-llm">
+    {% set llm_roles = [
+        ('summarize', 'Summarize', 'Batch gossip extraction'),
+        ('analyze', 'Analyze', 'Cross-channel narrative synthesis'),
+        ('discovery', 'Discovery', 'Community source suggestions'),
+        ('tone', 'Tone Scoring', 'Commenter credibility'),
+        ('creator', 'Creator Analysis', 'Defensiveness & bragging'),
+    ] %}
+    {% for role, label, desc in llm_roles %}
+    <div class="llm-card">
+        <h3>{{ label }} <span style="font-weight:400;color:var(--muted);font-size:.78rem">— {{ desc }}</span></h3>
         <div class="form-row">
             <div class="form-group">
-                <label for="max_posts_per_subreddit">Max Posts per Subreddit</label>
-                <input type="number" id="max_posts_per_subreddit" name="max_posts_per_subreddit" value="{{ settings.max_posts_per_subreddit }}">
-            </div>
-            <div class="form-group">
-                <label for="reddit_post_sort">Post Sort</label>
-                <select id="reddit_post_sort" name="reddit_post_sort">
-                    <option value="hot" {% if settings.reddit_post_sort == 'hot' %}selected{% endif %}>Hot</option>
-                    <option value="new" {% if settings.reddit_post_sort == 'new' %}selected{% endif %}>New</option>
-                    <option value="top" {% if settings.reddit_post_sort == 'top' %}selected{% endif %}>Top</option>
-                    <option value="rising" {% if settings.reddit_post_sort == 'rising' %}selected{% endif %}>Rising</option>
+                <label>Backend</label>
+                <select name="llm_{{ role }}_backend">
+                    <option value="ollama" {% if settings['llm_' + role + '_backend'] == 'ollama' %}selected{% endif %}>Ollama</option>
+                    <option value="anthropic" {% if settings['llm_' + role + '_backend'] == 'anthropic' %}selected{% endif %}>Anthropic</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="reddit_time_filter">Time Filter (for Top)</label>
-                <select id="reddit_time_filter" name="reddit_time_filter">
-                    <option value="day" {% if settings.reddit_time_filter == 'day' %}selected{% endif %}>Day</option>
-                    <option value="week" {% if settings.reddit_time_filter == 'week' %}selected{% endif %}>Week</option>
-                    <option value="month" {% if settings.reddit_time_filter == 'month' %}selected{% endif %}>Month</option>
-                    <option value="year" {% if settings.reddit_time_filter == 'year' %}selected{% endif %}>Year</option>
-                    <option value="all" {% if settings.reddit_time_filter == 'all' %}selected{% endif %}>All Time</option>
-                </select>
+                <label>Anthropic Model</label>
+                <input type="text" name="llm_{{ role }}_anthropic_model" value="{{ settings['llm_' + role + '_anthropic_model'] }}">
             </div>
+            <div class="form-group">
+                <label>Ollama Model</label>
+                <input type="text" name="llm_{{ role }}_ollama_model" value="{{ settings['llm_' + role + '_ollama_model'] }}">
+            </div>
+            {% if role == 'summarize' %}
+            <div class="form-group">
+                <label>Max Tokens</label>
+                <input type="number" name="llm_summarize_max_tokens" value="{{ settings.llm_summarize_max_tokens }}">
+            </div>
+            <div class="form-group">
+                <label>Input Buffer (chars)</label>
+                <input type="number" name="llm_summarize_buffer_chars" value="{{ settings.llm_summarize_buffer_chars }}">
+            </div>
+            {% elif role == 'analyze' %}
+            <div class="form-group">
+                <label>Max Tokens</label>
+                <input type="number" name="llm_analyze_max_tokens" value="{{ settings.llm_analyze_max_tokens }}">
+            </div>
+            {% endif %}
         </div>
-        <small>Create a "script" app at <a href="https://www.reddit.com/prefs/apps" target="_blank">reddit.com/prefs/apps</a> to get credentials. Required for Reddit subreddit collection.</small>
     </div>
+    {% endfor %}
+</div>
 
+{# ── Tab: Collection ─────────────────────────────────────────────── #}
+<div class="spanel" id="stab-collection">
     <div class="settings-section">
         <h2>Gossip Collection</h2>
         <div class="form-row">
@@ -242,8 +153,49 @@
             </div>
         </div>
     </div>
-
     <div class="settings-section">
+        <h2>Reddit Collection</h2>
+        <div class="form-row">
+            <div class="form-group">
+                <label for="max_posts_per_subreddit">Max Posts per Subreddit</label>
+                <input type="number" id="max_posts_per_subreddit" name="max_posts_per_subreddit" value="{{ settings.max_posts_per_subreddit }}">
+            </div>
+            <div class="form-group">
+                <label for="reddit_post_sort">Post Sort</label>
+                <select id="reddit_post_sort" name="reddit_post_sort">
+                    <option value="hot" {% if settings.reddit_post_sort == 'hot' %}selected{% endif %}>Hot</option>
+                    <option value="new" {% if settings.reddit_post_sort == 'new' %}selected{% endif %}>New</option>
+                    <option value="top" {% if settings.reddit_post_sort == 'top' %}selected{% endif %}>Top</option>
+                    <option value="rising" {% if settings.reddit_post_sort == 'rising' %}selected{% endif %}>Rising</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="reddit_time_filter">Time Filter (for Top)</label>
+                <select id="reddit_time_filter" name="reddit_time_filter">
+                    <option value="day" {% if settings.reddit_time_filter == 'day' %}selected{% endif %}>Day</option>
+                    <option value="week" {% if settings.reddit_time_filter == 'week' %}selected{% endif %}>Week</option>
+                    <option value="month" {% if settings.reddit_time_filter == 'month' %}selected{% endif %}>Month</option>
+                    <option value="year" {% if settings.reddit_time_filter == 'year' %}selected{% endif %}>Year</option>
+                    <option value="all" {% if settings.reddit_time_filter == 'all' %}selected{% endif %}>All Time</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Tab: Advanced ───────────────────────────────────────────────── #}
+<div class="spanel" id="stab-advanced">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="ollama_base_url">Ollama Base URL</label>
+            <input type="text" id="ollama_base_url" name="ollama_base_url" value="{{ settings.ollama_base_url }}">
+        </div>
+        <div class="form-group">
+            <label for="llm_temperature">Temperature</label>
+            <input type="number" id="llm_temperature" name="llm_temperature" value="{{ settings.llm_temperature }}" step="0.1" min="0" max="2">
+        </div>
+    </div>
+    <div class="settings-section" style="margin-top:1rem">
         <h2>Entity Aliases</h2>
         <div class="form-group">
             <label for="entity_aliases">Alias Map (JSON)</label>
@@ -251,7 +203,27 @@
             <small>Maps variant names to canonical entity names for deduplication.</small>
         </div>
     </div>
+</div>
 
+<div class="settings-save">
     <button type="submit" class="btn btn-primary btn-lg">Save All Settings</button>
+</div>
+
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const tabs = document.querySelectorAll('.stab');
+    const panels = document.querySelectorAll('.spanel');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const name = tab.dataset.stab;
+            tabs.forEach(t => t.classList.toggle('active', t.dataset.stab === name));
+            panels.forEach(p => p.classList.toggle('active', p.id === 'stab-' + name));
+        });
+    });
+})();
+</script>
 {% endblock %}
