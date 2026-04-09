@@ -220,7 +220,7 @@
                 {% endif %}
             </div>
             <div class="wf-conn" style="grid-column:2;grid-row:7">&#8594;</div>
-            <div style="grid-column:3;grid-row:7"></div>
+            <div class="wf-conn" style="grid-column:3;grid-row:7">&#8594;</div>
             <div class="wf-conn" style="grid-column:4;grid-row:7">&#8594;</div>
             <div class="wf-node" data-step="themes" data-state="{{ pipeline_status.themes.state }}" style="grid-column:5;grid-row:7">
                 <div class="wf-node-name">Themes</div>
@@ -259,7 +259,7 @@
                 <div class="wf-node-time muted">Never</div>
                 {% endif %}
             </div>
-            <div class="wf-conn" style="grid-column:4;grid-row:9">&#8592;</div>
+            <div class="wf-conn" style="grid-column:4;grid-row:9">&#8594;</div>
             <div class="wf-node" data-step="exec_reports" data-state="{{ pipeline_status.exec_reports.state }}" style="grid-column:5;grid-row:9">
                 <div class="wf-node-name">Exec Reports</div>
                 {% if pipeline_status.exec_reports.timestamp %}
@@ -588,22 +588,80 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel" id="panel-creators">
     <div class="section">
-        <h2>Channels ({{ channels|length }})</h2>
+        <div class="page-header" style="margin-bottom:1rem">
+            <h2>Channels ({{ channels|length }})</h2>
+        </div>
+
         {% if channels %}
-        <div class="creators-grid">
-            {% for ch in channels %}
-            <a href="{{ url_for('workspace.creator_view', community_id=community.id, channel_id=ch.channel_id) }}" class="creator-card">
-                {% if ch.thumbnail_url %}
-                <img src="{{ ch.thumbnail_url }}" class="creator-card-thumb" alt="" loading="lazy">
-                {% else %}
-                <div class="creator-card-thumb"></div>
-                {% endif %}
-                <div class="creator-card-info">
-                    <h4>{{ ch.channel_name }}</h4>
-                    <p>{{ ch.handle or '' }} &middot; {{ "{:,}".format(ch.subscriber_count or 0) }} subs</p>
+        {# ── Sort & Color controls ─────────────────────────────────────── #}
+        <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap">
+            <div style="display:flex;gap:.5rem;align-items:center">
+                <label style="font-size:.9rem;color:var(--muted)">Sort by:</label>
+                <select id="creator-sort-metric" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.35rem .6rem;font-size:.9rem">
+                    {% for col, label in creator_metrics %}
+                    <option value="{{ col }}" {% if creators_sort == col %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <div style="display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden">
+                    <button id="dir-desc" class="creator-dir-btn {% if creators_dir == 'desc' %}active{% endif %}" title="Descending (highest first)" style="padding:.3rem .6rem;font-size:.82rem;border:none;cursor:pointer">&#9660;</button>
+                    <button id="dir-asc" class="creator-dir-btn {% if creators_dir == 'asc' %}active{% endif %}" title="Ascending (lowest first)" style="padding:.3rem .6rem;font-size:.82rem;border:none;cursor:pointer">&#9650;</button>
                 </div>
-            </a>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:.4rem;margin-left:.5rem">
+                <span style="font-size:.82rem;color:var(--muted)">Color:</span>
+                <div style="display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden">
+                    <button class="cr-cm-btn" data-mode="abs" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--accent);color:#fff" title="Absolute thresholds">Abs</button>
+                    <button class="cr-cm-btn" data-mode="3" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="Top/middle/bottom thirds">3 bands</button>
+                    <button class="cr-cm-btn" data-mode="5" style="padding:.25rem .55rem;font-size:.78rem;border:none;cursor:pointer;background:var(--surface);color:var(--muted)" title="5 equal percentile bands">5 bands</button>
+                </div>
+                <button id="cr-green-btn" style="padding:.25rem .65rem;font-size:.78rem;border:1px solid var(--border);border-radius:5px;cursor:pointer;background:var(--surface);color:var(--muted);margin-left:.25rem" title="Sort by composite greenness">Greenness &#8597;</button>
+            </div>
+        </div>
+
+        {# ── Table ─────────────────────────────────────────────────────── #}
+        <div style="overflow-x:auto">
+        <table id="creators-table" style="width:100%;border-collapse:collapse;font-size:.9rem">
+            <thead>
+                <tr style="text-align:left;border-bottom:2px solid var(--border);color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.05em">
+                    <th style="padding:.4rem .5rem;width:2rem">#</th>
+                    <th style="padding:.4rem .5rem">Channel</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Subscriber count (latest snapshot)">Subs</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Total view count (latest snapshot)">Views</th>
+                    <th style="padding:.4rem .4rem;text-align:right" title="Video count (latest snapshot)">Vids</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Subscriber growth % from first to latest snapshot">Sub%</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="View growth % from first to latest snapshot">View%</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Avg views-per-video growth %">VPV%</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Engagement rate: likes / views %">Eng%</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Views per subscriber ratio">V/S</th>
+                    <th class="cmc" style="padding:.4rem .4rem;text-align:right" title="Comment rate: comments / views %">Cmt%</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for ch in channels %}
+                <tr data-rank="{{ loop.index }}" style="border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background=''">
+                    <td style="padding:.4rem .5rem;color:var(--muted)">{{ loop.index }}</td>
+                    <td style="padding:.4rem .5rem;font-weight:500;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                        <a href="{{ url_for('workspace.creator_view', community_id=community.id, channel_id=ch.channel_id) }}" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:.5rem" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                            {% if ch.thumbnail_url %}
+                            <img src="{{ ch.thumbnail_url }}" style="width:24px;height:24px;border-radius:50%;flex-shrink:0" loading="lazy">
+                            {% endif %}
+                            <span title="{{ ch.channel_name }}">{{ ch.channel_name }}</span>
+                        </a>
+                    </td>
+                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.subscriber_count) }}</td>
+                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.view_count) }}</td>
+                    <td style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ "{:,}".format(ch.video_count) }}</td>
+                    <td class="cmc" data-col="sub_growth" data-val="{{ ch.sub_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.sub_growth }}%</td>
+                    <td class="cmc" data-col="view_growth" data-val="{{ ch.view_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.view_growth }}%</td>
+                    <td class="cmc" data-col="avg_views_growth" data-val="{{ ch.avg_views_growth }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.avg_views_growth }}%</td>
+                    <td class="cmc" data-col="engagement_rate" data-val="{{ ch.engagement_rate }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.engagement_rate }}%</td>
+                    <td class="cmc" data-col="views_per_sub" data-val="{{ ch.views_per_sub }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.views_per_sub }}</td>
+                    <td class="cmc" data-col="comment_rate" data-val="{{ ch.comment_rate }}" style="padding:.4rem .4rem;text-align:right;font-size:.82rem">{{ ch.comment_rate }}%</td>
+                </tr>
             {% endfor %}
+            </tbody>
+        </table>
         </div>
         {% else %}
         <p class="muted">No channels in this community. <a href="{{ url_for('community.edit', community_id=community.id) }}">Add channels</a></p>
@@ -762,16 +820,43 @@ function renderCoverage(channels, container) {
             desc: 'Run algorithmic scoring on all commenters',
             action: '{{ url_for("gossip.score_commenters_now", community_id=community.id) }}',
         },
-        summarize: null,
-        aggregate: null,
-        analyze: null,
-        report: null,
-        themes: null,
-        exec_reports: null,
+        summarize: {
+            label: 'Summarize',
+            desc: 'Extract gossip from new/changed videos',
+            action: '{{ url_for("gossip.start_summarize", community_id=community.id) }}',
+        },
+        aggregate: {
+            label: 'Aggregate',
+            desc: 'Aggregate metrics from summaries',
+            action: '{{ url_for("gossip.start_aggregate", community_id=community.id) }}',
+        },
+        analyze: {
+            label: 'Analyze',
+            desc: 'Run LLM narrative analysis on aggregated data',
+            action: '{{ url_for("gossip.start_analyze", community_id=community.id) }}',
+        },
+        report: {
+            label: 'Report',
+            desc: 'Generate HTML report from latest analysis',
+            action: '{{ url_for("gossip.start_report", community_id=community.id) }}',
+        },
+        themes: {
+            label: 'Themes',
+            desc: 'Cluster gossip items into themes (with LLM titles)',
+            action: '{{ url_for("gossip.start_themes", community_id=community.id) }}',
+        },
+        exec_reports: {
+            label: 'Executive Reports',
+            desc: 'Generate executive summary & top insights',
+            action: '{{ url_for("gossip.start_exec_reports", community_id=community.id) }}',
+        },
         coverage: null,
     };
 
+    let _submitted = false;
     function submitForm(action, fields) {
+        if (_submitted) return;
+        _submitted = true;
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = action;
@@ -800,7 +885,10 @@ function renderCoverage(channels, container) {
         node.title = config.desc + ' — click to run';
 
         node.addEventListener('click', () => {
+            if (_submitted) return;
             if (!confirm(`Run ${config.label}?\n\n${config.desc}`)) return;
+            node.style.opacity = '0.5';
+            node.style.pointerEvents = 'none';
             submitForm(config.action, config.fields);
         });
     });
@@ -843,8 +931,11 @@ function renderCoverage(channels, container) {
         menu.querySelectorAll('.wf-node-menu-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
+                if (_submitted) return;
                 const action = btn.dataset.action;
                 menu.style.display = 'none';
+                toneNode.style.opacity = '0.5';
+                toneNode.style.pointerEvents = 'none';
                 if (action === 'tone-all') {
                     submitForm('{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}', {scope: 'all'});
                 } else if (action === 'tone-creators') {
@@ -988,7 +1079,7 @@ pollCollectJob();
     const quotaText = document.getElementById('quota-text');
     const quotaFill = document.getElementById('quota-fill');
 
-    const STEPS = ['collecting','summarizing','aggregating','analyzing','reporting'];
+    const STEPS = ['collecting','summarizing','aggregating','analyzing','reporting','theming','exec_reporting'];
 
     function poll() {
         fetch('{{ url_for("gossip.run_status", run_id=0) }}'.replace('/0/', '/' + runId + '/'))
@@ -1032,6 +1123,191 @@ pollCollectJob();
             .catch(() => setTimeout(poll, 5000));
     }
     poll();
+})();
+
+// Prevent double-submit on all forms with submit buttons
+document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', () => {
+        const btn = form.querySelector('button[type="submit"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+    });
+});
+
+// ── Creator metrics table: sort, color, greenness ────────────────────
+(function() {
+    const table = document.getElementById('creators-table');
+    if (!table) return;
+
+    const C3 = ['#e74c3c', '#f39c12', '#2ecc71'];
+    const C5 = ['#e74c3c', '#e67e22', '#5dade2', '#a8e6cf', '#2ecc71'];
+    let crColorMode = 'abs';
+    let crGreenDir = null;
+
+    // ── Sort controls (server-side via URL) ──
+    const sortSelect = document.getElementById('creator-sort-metric');
+    const dirDesc = document.getElementById('dir-desc');
+    const dirAsc = document.getElementById('dir-asc');
+
+    function applySort(col, dir) {
+        const url = new URL(window.location);
+        url.searchParams.set('csort', col);
+        url.searchParams.set('cdir', dir);
+        url.hash = 'creators';
+        window.location = url;
+    }
+
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            const dir = dirDesc.classList.contains('active') ? 'desc' : 'asc';
+            applySort(sortSelect.value, dir);
+        });
+    }
+    if (dirDesc) dirDesc.addEventListener('click', () => applySort(sortSelect.value, 'desc'));
+    if (dirAsc) dirAsc.addEventListener('click', () => applySort(sortSelect.value, 'asc'));
+
+    // ── Percentile color helpers ──
+    function percentileRank(sorted, v) {
+        let lo = 0, hi = sorted.length;
+        while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] < v) lo = m + 1; else hi = m; }
+        return lo / sorted.length;
+    }
+    function bandColor(palette, pct) {
+        return palette[Math.min(Math.floor(pct * palette.length), palette.length - 1)];
+    }
+    function absColor(val) {
+        // For growth-style metrics: higher = better
+        if (val >= 66) return '#2ecc71';
+        if (val >= 33) return '#f39c12';
+        return '#e74c3c';
+    }
+
+    function buildByCol(cells) {
+        const byCol = {};
+        cells.forEach(td => {
+            const v = td.dataset.val;
+            if (v === '' || v == null) return;
+            (byCol[td.dataset.col] = byCol[td.dataset.col] || []).push(parseFloat(v));
+        });
+        Object.values(byCol).forEach(a => a.sort((x, y) => x - y));
+        return byCol;
+    }
+
+    function applyCreatorColors() {
+        const cells = Array.from(table.querySelectorAll('td.cmc[data-col]'));
+        const byCol = crColorMode !== 'abs' ? buildByCol(cells) : null;
+        const palette = crColorMode === '3' ? C3 : C5;
+
+        cells.forEach(td => {
+            const v = td.dataset.val;
+            if (v === '' || v == null) { td.style.color = 'var(--border)'; td.style.fontWeight = ''; return; }
+            const fv = parseFloat(v);
+            let color;
+            if (crColorMode === 'abs') {
+                // Percentile within col for abs mode: use the value directly
+                // For growth metrics, positive = good; we normalize to 0-100 range within page
+                const sorted = [];
+                cells.forEach(c => { if (c.dataset.col === td.dataset.col && c.dataset.val) sorted.push(parseFloat(c.dataset.val)); });
+                sorted.sort((a, b) => a - b);
+                const pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+                color = pct >= 0.66 ? '#2ecc71' : pct >= 0.33 ? '#f39c12' : '#e74c3c';
+            } else {
+                const sorted = byCol[td.dataset.col] || [];
+                const pct = sorted.length ? percentileRank(sorted, fv) : 0.5;
+                color = bandColor(palette, pct);
+            }
+            td.style.color = color;
+            td.style.fontWeight = '500';
+        });
+    }
+
+    // Color mode buttons
+    document.querySelectorAll('.cr-cm-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            crColorMode = btn.dataset.mode;
+            document.querySelectorAll('.cr-cm-btn').forEach(b => {
+                b.style.background = b.dataset.mode === crColorMode ? 'var(--accent)' : 'var(--surface)';
+                b.style.color = b.dataset.mode === crColorMode ? '#fff' : 'var(--muted)';
+            });
+            applyCreatorColors();
+            if (crGreenDir) applyCreatorGreenSort();
+        });
+    });
+
+    // ── Greenness sort ──
+    function cellScore(td, byCol) {
+        const v = td.dataset.val;
+        if (v === '' || v == null) return null;
+        const fv = parseFloat(v);
+        if (crColorMode === 'abs') {
+            const sorted = [];
+            table.querySelectorAll(`td.cmc[data-col="${td.dataset.col}"]`).forEach(c => {
+                if (c.dataset.val) sorted.push(parseFloat(c.dataset.val));
+            });
+            sorted.sort((a, b) => a - b);
+            return sorted.length ? percentileRank(sorted, fv) : 0.5;
+        } else {
+            const sorted = byCol[td.dataset.col] || [];
+            return sorted.length ? percentileRank(sorted, fv) : 0.5;
+        }
+    }
+
+    function rowGreenScore(tr, byCol) {
+        const cells = tr.querySelectorAll('td.cmc[data-col]');
+        let sum = 0, n = 0;
+        cells.forEach(td => {
+            const q = cellScore(td, byCol);
+            if (q !== null) { sum += q; n++; }
+        });
+        return n ? sum / n : 0;
+    }
+
+    function applyCreatorGreenSort() {
+        if (!crGreenDir) return;
+        const tbody = table.querySelector('tbody');
+        if (!tbody) return;
+        const cells = Array.from(table.querySelectorAll('td.cmc[data-col]'));
+        const byCol = crColorMode !== 'abs' ? buildByCol(cells) : null;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+            const sa = rowGreenScore(a, byCol), sb = rowGreenScore(b, byCol);
+            return crGreenDir === 'desc' ? sb - sa : sa - sb;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+        rows.forEach((r, i) => {
+            const rankTd = r.querySelector('td:first-child');
+            if (rankTd) rankTd.textContent = i + 1;
+        });
+    }
+
+    const greenBtn = document.getElementById('cr-green-btn');
+    if (greenBtn) {
+        greenBtn.addEventListener('click', () => {
+            crGreenDir = crGreenDir === null ? 'desc' : crGreenDir === 'desc' ? 'asc' : null;
+            if (!crGreenDir) {
+                greenBtn.textContent = 'Greenness \u2195';
+                greenBtn.style.background = 'var(--surface)'; greenBtn.style.color = 'var(--muted)'; greenBtn.style.borderColor = 'var(--border)';
+                // Restore server order
+                const tbody = table.querySelector('tbody');
+                if (tbody) {
+                    const rows = Array.from(tbody.querySelectorAll('tr'));
+                    rows.sort((a, b) => parseInt(a.dataset.rank) - parseInt(b.dataset.rank));
+                    rows.forEach(r => tbody.appendChild(r));
+                    rows.forEach(r => { const td = r.querySelector('td:first-child'); if (td) td.textContent = r.dataset.rank; });
+                }
+            } else if (crGreenDir === 'desc') {
+                greenBtn.textContent = 'Greenness \u2193';
+                greenBtn.style.background = '#2ecc7122'; greenBtn.style.color = '#2ecc71'; greenBtn.style.borderColor = '#2ecc7166';
+                applyCreatorGreenSort();
+            } else {
+                greenBtn.textContent = 'Greenness \u2191';
+                greenBtn.style.background = '#e74c3c22'; greenBtn.style.color = '#e74c3c'; greenBtn.style.borderColor = '#e74c3c66';
+                applyCreatorGreenSort();
+            }
+        });
+    }
+
+    // Apply default coloring on load
+    applyCreatorColors();
 })();
 </script>
 {% endblock %}

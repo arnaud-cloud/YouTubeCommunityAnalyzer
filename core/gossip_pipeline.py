@@ -494,3 +494,145 @@ def run_resummarize_all(db_path: str, community_id: int, run_id: int):
         _fail_run(conn, run_id, str(e))
     finally:
         conn.close()
+
+
+# ── Single-step runners (for workflow node clicks) ──────────────────
+
+def run_summarize_only(db_path: str, community_id: int, run_id: int):
+    """Run only the summarize step (incremental — new/changed videos)."""
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+        _update_run(conn, run_id, "summarizing", "Summarizing new videos...")
+        log.info(f"[Run {run_id}] Summarize only")
+        gossip_summarize.summarize_community(conn, community_id, progress_callback=progress)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "completed_at=datetime('now') WHERE id=?", (run_id,))
+        conn.commit()
+        log.info(f"[Run {run_id}] Summarize only complete")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Summarize only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_aggregate_only(db_path: str, community_id: int, run_id: int):
+    """Run only the aggregate step."""
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+        _update_run(conn, run_id, "aggregating", "Aggregating metrics...")
+        log.info(f"[Run {run_id}] Aggregate only")
+        agg_id = gossip_aggregate.aggregate_community(conn, community_id, progress_callback=progress)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "completed_at=datetime('now') WHERE id=?", (run_id,))
+        conn.commit()
+        log.info(f"[Run {run_id}] Aggregate only complete (agg_id={agg_id})")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Aggregate only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_analyze_only(db_path: str, community_id: int, run_id: int):
+    """Run only the analyze step (uses latest aggregation)."""
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+        row = conn.execute(
+            "SELECT id FROM aggregation_results WHERE community_id = ? ORDER BY id DESC LIMIT 1",
+            (community_id,),
+        ).fetchone()
+        if not row:
+            _fail_run(conn, run_id, "No aggregation found — run Aggregate first.")
+            return
+        agg_id = row[0]
+        _update_run(conn, run_id, "analyzing", "Running LLM analysis...")
+        log.info(f"[Run {run_id}] Analyze only (agg_id={agg_id})")
+        analysis_id = gossip_analyze.analyze_aggregation(conn, agg_id, progress_callback=progress)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "analysis_id=?, completed_at=datetime('now') WHERE id=?",
+            (analysis_id, run_id))
+        conn.commit()
+        log.info(f"[Run {run_id}] Analyze only complete (analysis_id={analysis_id})")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Analyze only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_report_only(db_path: str, community_id: int, run_id: int):
+    """Run only the report generation step (uses latest analysis)."""
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+        row = conn.execute(
+            "SELECT id FROM analysis_results WHERE community_id = ? ORDER BY id DESC LIMIT 1",
+            (community_id,),
+        ).fetchone()
+        if not row:
+            _fail_run(conn, run_id, "No analysis found — run Analyze first.")
+            return
+        analysis_id = row[0]
+        _update_run(conn, run_id, "reporting", "Generating report...")
+        log.info(f"[Run {run_id}] Report only (analysis_id={analysis_id})")
+        gossip_report.generate_report_html(conn, analysis_id)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "analysis_id=?, completed_at=datetime('now') WHERE id=?",
+            (analysis_id, run_id))
+        conn.commit()
+        log.info(f"[Run {run_id}] Report only complete")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Report only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_themes_only(db_path: str, community_id: int, run_id: int):
+    """Run only theme computation (with LLM titles)."""
+    conn = get_db(db_path)
+    try:
+        progress = _make_progress(conn, run_id)
+        _update_run(conn, run_id, "theming", "Computing themes...")
+        log.info(f"[Run {run_id}] Themes only")
+        n = gossip_themes.compute_themes(conn, community_id, use_llm=True, progress_callback=progress)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "completed_at=datetime('now') WHERE id=?", (run_id,))
+        conn.commit()
+        log.info(f"[Run {run_id}] Themes only complete ({n} themes)")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Themes only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()
+
+
+def run_exec_reports_only(db_path: str, community_id: int, run_id: int):
+    """Run only executive report generation."""
+    conn = get_db(db_path)
+    try:
+        from .executive_summary import generate_executive_summary, generate_top_insights
+        progress = _make_progress(conn, run_id)
+        _update_run(conn, run_id, "exec_reporting", "Generating executive reports...")
+        log.info(f"[Run {run_id}] Exec reports only")
+        generate_executive_summary(conn, community_id)
+        generate_top_insights(conn, community_id)
+        conn.execute(
+            "UPDATE gossip_runs SET status='complete', current_step='complete', "
+            "completed_at=datetime('now') WHERE id=?", (run_id,))
+        conn.commit()
+        log.info(f"[Run {run_id}] Exec reports only complete")
+    except Exception as e:
+        log.error(f"[Run {run_id}] Exec reports only failed: {e}", exc_info=True)
+        _fail_run(conn, run_id, str(e))
+    finally:
+        conn.close()

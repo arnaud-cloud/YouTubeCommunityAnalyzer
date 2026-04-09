@@ -9,7 +9,12 @@ log = logging.getLogger(__name__)
 from flask import Blueprint, render_template, request, redirect, url_for, flash, current_app, jsonify
 from markupsafe import Markup
 from core.db import get_db, get_all_settings, get_community_channel_ids
-from core.gossip_pipeline import run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize, run_reanalyze, run_resummarize_all
+from core.gossip_pipeline import (
+    run_gossip_pipeline, run_collect_only, run_local_steps, run_force_summarize,
+    run_reanalyze, run_resummarize_all,
+    run_summarize_only, run_aggregate_only, run_analyze_only,
+    run_report_only, run_themes_only, run_exec_reports_only,
+)
 from core.gossip_report import generate_report_html
 from core.executive_summary import (
     generate_executive_summary, generate_top_insights,
@@ -471,6 +476,63 @@ def start_resummarize_all(community_id):
     t.start()
     flash("Re-summarize All started — all videos will be reprocessed from scratch.", "success")
     return redirect(url_for("workspace.community_workspace", community_id=community_id))
+
+
+def _start_single_step(community_id, runner_fn, flash_msg):
+    """Helper: create a run record and launch a single-step runner in a thread."""
+    conn = get_db(current_app.config["DB_PATH"])
+    active = conn.execute(
+        "SELECT id FROM gossip_runs WHERE community_id = ? AND status NOT IN ('complete','failed')",
+        (community_id,),
+    ).fetchone()
+    if active:
+        conn.close()
+        flash("A pipeline is already running for this community.", "error")
+        return redirect(url_for("workspace.community_workspace", community_id=community_id))
+
+    cur = conn.execute(
+        "INSERT INTO gossip_runs (community_id, status) VALUES (?, 'pending')",
+        (community_id,),
+    )
+    conn.commit()
+    run_id = cur.lastrowid
+    conn.close()
+
+    db_path = current_app.config["DB_PATH"]
+    t = threading.Thread(target=runner_fn, args=(db_path, community_id, run_id), daemon=True)
+    t.start()
+    flash(flash_msg, "success")
+    return redirect(url_for("workspace.community_workspace", community_id=community_id))
+
+
+@bp.route("/<int:community_id>/summarize", methods=["POST"])
+def start_summarize(community_id):
+    return _start_single_step(community_id, run_summarize_only, "Summarize started.")
+
+
+@bp.route("/<int:community_id>/aggregate", methods=["POST"])
+def start_aggregate(community_id):
+    return _start_single_step(community_id, run_aggregate_only, "Aggregate started.")
+
+
+@bp.route("/<int:community_id>/analyze", methods=["POST"])
+def start_analyze(community_id):
+    return _start_single_step(community_id, run_analyze_only, "Analyze started.")
+
+
+@bp.route("/<int:community_id>/report", methods=["POST"])
+def start_report(community_id):
+    return _start_single_step(community_id, run_report_only, "Report generation started.")
+
+
+@bp.route("/<int:community_id>/themes", methods=["POST"])
+def start_themes(community_id):
+    return _start_single_step(community_id, run_themes_only, "Theme computation started.")
+
+
+@bp.route("/<int:community_id>/exec-reports", methods=["POST"])
+def start_exec_reports(community_id):
+    return _start_single_step(community_id, run_exec_reports_only, "Executive reports started.")
 
 
 @bp.route("/run/<int:run_id>/status")

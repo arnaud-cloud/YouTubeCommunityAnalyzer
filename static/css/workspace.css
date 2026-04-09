@@ -498,6 +498,16 @@
     color: var(--muted);
 }
 
+/* ── Creator sort direction buttons ──────────────────────────── */
+.creator-dir-btn {
+    background: var(--surface);
+    color: var(--muted);
+}
+.creator-dir-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+
 /* ── Creator view page ────────────────────────────────────────── */
 .creator-header {
     display: flex;
