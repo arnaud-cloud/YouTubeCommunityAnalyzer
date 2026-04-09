@@ -234,17 +234,20 @@ def coverage_timeline(community_id):
     ).fetchall():
         channels_info[row["channel_id"]] = row["channel_name"]
 
-    # Get comment/video counts per channel per month (last 5 years)
+    # Get video counts per channel per month + comment counts joined in
     data = conn.execute(f"""
-        SELECT channel_id,
-               strftime('%Y-%m', published_at) AS month,
-               COUNT(DISTINCT video_id) AS videos,
-               COUNT(*) AS comments
-        FROM comments
-        WHERE channel_id IN ({ph})
-          AND published_at >= date('now', '-5 years')
-        GROUP BY channel_id, month
-        ORDER BY channel_id, month
+        SELECT v.channel_id,
+               strftime('%Y-%m', v.published_at) AS month,
+               COUNT(DISTINCT v.video_id) AS videos,
+               COALESCE(SUM(c.cnt), 0) AS comments
+        FROM videos v
+        LEFT JOIN (
+            SELECT video_id, COUNT(*) AS cnt FROM comments GROUP BY video_id
+        ) c ON v.video_id = c.video_id
+        WHERE v.channel_id IN ({ph})
+          AND v.published_at >= date('now', '-5 years')
+        GROUP BY v.channel_id, month
+        ORDER BY v.channel_id, month
     """, channel_ids).fetchall()
 
     # Group by channel
