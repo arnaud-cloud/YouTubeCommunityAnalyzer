@@ -89,10 +89,25 @@ def _calc_analyze_cost(conn, community_id: int, model: str) -> dict:
     return {"cost": cost, "model": _model_label(model)}
 
 
+def _calc_tone_cost(pending_count: int, model: str) -> dict:
+    """Estimate cost for LLM tone scoring of pending commenters."""
+    if pending_count == 0:
+        return {"commenters": 0, "cost": 0.0, "model": _model_label(model)}
+    in_price, out_price = _model_prices(model)
+    # 10 commenters per batch, ~30 comments each truncated to 200 chars
+    # ≈ 60k chars per batch ≈ 15k input tokens + 900 system prompt
+    batch_count = math.ceil(pending_count / 10)
+    input_tokens = batch_count * (15_000 + 900)
+    # Output: ~200 tokens per commenter (JSON scores)
+    output_tokens = pending_count * 200
+    cost = (input_tokens / 1_000_000 * in_price) + (output_tokens / 1_000_000 * out_price)
+    return {"commenters": pending_count, "cost": cost, "model": _model_label(model)}
+
+
 def _get_cost_estimates(conn, community_id: int) -> dict:
     """
     Return cost estimates for each LLM role that uses Anthropic.
-    Keys: summarize (with incremental/force sub-keys), analyze.
+    Keys: summarize (with incremental/force sub-keys), analyze, tone.
     Always returns a dict; missing keys mean that role uses a local backend.
     """
     settings     = get_all_settings(conn)
@@ -137,6 +152,25 @@ def _get_cost_estimates(conn, community_id: int) -> dict:
     if settings.get("llm_analyze_backend", "anthropic") == "anthropic":
         analyze_model = settings.get("llm_analyze_anthropic_model", "claude-sonnet-4-6")
         result["analyze"] = _calc_analyze_cost(conn, community_id, analyze_model)
+
+    # Tone scoring cost
+    tone_backend = settings.get("llm_tone_backend") or "ollama"
+    creator_backend = settings.get("llm_creator_backend") or "anthropic"
+    if tone_backend == "anthropic" or creator_backend == "anthropic":
+        tone_model = (settings.get("llm_tone_anthropic_model")
+                      or settings.get("llm_creator_anthropic_model")
+                      or "claude-haiku-4-5")
+        total_scored = conn.execute(
+            "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
+            (community_id,),
+        ).fetchone()[0]
+        already_done = conn.execute(
+            "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ? "
+            "AND llm_tone_score IS NOT NULL",
+            (community_id,),
+        ).fetchone()[0]
+        pending_tone = total_scored - already_done
+        result["tone"] = _calc_tone_cost(max(0, pending_tone), tone_model)
 
     return result
 

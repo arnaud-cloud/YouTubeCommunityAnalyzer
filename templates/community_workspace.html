@@ -173,6 +173,10 @@
                 {% if tone_status.detail %}
                 <div class="wf-node-detail">{{ tone_status.detail }}</div>
                 {% endif %}
+                {% if cost_estimates.get('tone') and cost_estimates.tone.cost > 0 %}
+                <div class="wf-node-cost">${{ "%.2f"|format(cost_estimates.tone.cost) }}</div>
+                <div class="wf-node-detail">{{ cost_estimates.tone.commenters }} pending</div>
+                {% endif %}
             </div>
             <div style="grid-column:4;grid-row:5"></div>
             <div style="grid-column:5;grid-row:5"></div>
@@ -734,7 +738,10 @@ function renderCoverage(channels, container) {
         },
         tone_scoring: {
             label: 'LLM Tone Scoring',
-            desc: 'Run LLM tone analysis on all commenters',
+            desc: 'Run LLM tone analysis on all commenters'
+                {% if cost_estimates.get('tone') and cost_estimates.tone.cost > 0 %}
+                + '\nEstimated cost: ~${{ "%.2f"|format(cost_estimates.tone.cost) }} ({{ cost_estimates.tone.commenters }} commenters)'
+                {% endif %},
             action: '{{ url_for("gossip.tone_score_commenters", community_id=community.id) }}',
             fields: {scope: 'all'},
         },
