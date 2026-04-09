@@ -87,7 +87,7 @@
         <span class="gossip-card-type badge">{{ gi.gossip_type }}</span>
         <p class="gossip-card-claim">{{ gi.claim }}</p>
         <p class="gossip-card-meta">
-            Confidence: {{ "%.0f"|format(gi.confidence * 100) }}% &middot;
+            Confidence: {{ "%.0f"|format((gi.confidence|float) * 100) }}% &middot;
             {{ gi.source_channel }} &middot;
             {{ gi.video_title[:60] }}{% if gi.video_title|length > 60 %}...{% endif %}
         </p>
