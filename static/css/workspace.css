@@ -701,8 +701,9 @@
     overflow: hidden;
 }
 .network-svg {
+    display: block;
     width: 100%;
-    min-height: 500px;
+    height: auto;
 }
 .network-controls {
     display: flex;
