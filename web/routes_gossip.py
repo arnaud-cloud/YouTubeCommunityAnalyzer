@@ -153,24 +153,18 @@ def _get_cost_estimates(conn, community_id: int) -> dict:
         analyze_model = settings.get("llm_analyze_anthropic_model", "claude-sonnet-4-6")
         result["analyze"] = _calc_analyze_cost(conn, community_id, analyze_model)
 
-    # Tone scoring cost
-    tone_backend = settings.get("llm_tone_backend") or "ollama"
+    # Deep Creator Analysis cost (Anthropic, creators only)
     creator_backend = settings.get("llm_creator_backend") or "anthropic"
-    if tone_backend == "anthropic" or creator_backend == "anthropic":
-        tone_model = (settings.get("llm_tone_anthropic_model")
-                      or settings.get("llm_creator_anthropic_model")
-                      or "claude-haiku-4-5")
-        total_scored = conn.execute(
-            "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ?",
-            (community_id,),
+    if creator_backend == "anthropic" and channel_ids:
+        creator_model = settings.get("llm_creator_anthropic_model") or "claude-haiku-4-5"
+        ph = ",".join("?" * len(channel_ids))
+        # Count creators (channel owners) in commenter_scores
+        total_creators = conn.execute(
+            f"SELECT COUNT(*) FROM commenter_scores "
+            f"WHERE community_id = ? AND author_channel_id IN ({ph})",
+            [community_id] + list(channel_ids),
         ).fetchone()[0]
-        already_done = conn.execute(
-            "SELECT COUNT(*) FROM commenter_scores WHERE community_id = ? "
-            "AND llm_tone_score IS NOT NULL",
-            (community_id,),
-        ).fetchone()[0]
-        pending_tone = total_scored - already_done
-        result["tone"] = _calc_tone_cost(max(0, pending_tone), tone_model)
+        result["tone"] = _calc_tone_cost(max(0, total_creators), creator_model)
 
     return result
 

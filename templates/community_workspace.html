@@ -174,8 +174,7 @@
                 <div class="wf-node-detail">{{ tone_status.detail }}</div>
                 {% endif %}
                 {% if cost_estimates.get('tone') and cost_estimates.tone.cost > 0 %}
-                <div class="wf-node-cost">${{ "%.2f"|format(cost_estimates.tone.cost) }}</div>
-                <div class="wf-node-detail">{{ cost_estimates.tone.commenters }} pending</div>
+                <div class="wf-node-cost">${{ "%.2f"|format(cost_estimates.tone.cost) }} · {{ cost_estimates.tone.commenters }} creators</div>
                 {% endif %}
             </div>
             <div style="grid-column:4;grid-row:5"></div>
