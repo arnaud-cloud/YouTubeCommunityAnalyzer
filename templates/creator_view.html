@@ -232,6 +232,11 @@ let charts = {};
     if (s.llm_tone_score !== null && s.llm_tone_score !== undefined) {
         bars.push(['Substance (T)', Math.round((s.llm_tone_score || 0) * 100), toneColor(s.llm_tone_score || 0)]);
     }
+    if (s.llm_defensiveness_score !== null && s.llm_defensiveness_score !== undefined) {
+        const dv = s.llm_defensiveness_score;
+        const dc = dv >= 0.6 ? '#e74c3c' : dv >= 0.3 ? '#f39c12' : '#2ecc71';
+        bars.push(['Defensiveness (D)', Math.round(dv * 100), dc]);
+    }
 
     const barsHtml = bars.map(([label, val, color]) => `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
@@ -246,6 +251,32 @@ let charts = {};
         ? `<div style="margin-top:.6rem;font-size:.88rem;line-height:1.5;color:var(--text)">${s.llm_tone_reason}</div>`
         : '';
 
+    // Defensiveness assessment
+    let defHtml = '';
+    if (s.llm_defensiveness_score !== null && s.llm_defensiveness_score !== undefined) {
+        const dv = s.llm_defensiveness_score;
+        const dc = dv >= 0.6 ? '#e74c3c' : dv >= 0.3 ? '#f39c12' : '#2ecc71';
+        const dpct = Math.round(dv * 100);
+        let severity;
+        if (dv < 0.1) severity = 'None detected';
+        else if (dv < 0.5) severity = 'Subtle instances only';
+        else if (dv < 0.7) severity = 'One clear instance';
+        else if (dv < 0.9) severity = 'Two clear instances';
+        else severity = 'Three or more clear instances';
+        const defReason = s.llm_defensiveness_reason
+            ? `<div style="font-size:.88rem;line-height:1.6;color:var(--text)">${s.llm_defensiveness_reason}</div>`
+            : '';
+        defHtml = `
+            <div style="margin-top:.75rem;background:var(--surface);border:1px solid ${dc}44;border-radius:10px;padding:1rem 1.15rem">
+                <div style="display:flex;align-items:baseline;gap:.75rem;margin-bottom:.3rem">
+                    <span style="font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${dc}">Defensiveness &amp; Bragging</span>
+                    <span style="font-size:1.3rem;font-weight:800;color:${dc}">${dpct}%</span>
+                </div>
+                <div style="font-size:.78rem;color:var(--muted);margin-bottom:.5rem">${severity} &middot; counts as 50% of final score (lower is better)</div>
+                ${defReason}
+            </div>`;
+    }
+
     card.innerHTML = `
         <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
             <div style="font-size:.85rem;font-weight:600;color:#a8e6cf">Commenter Credibility</div>
@@ -257,6 +288,7 @@ let charts = {};
             <div style="font-size:.82rem;color:var(--muted)">
                 ${s.llm_tone_reason ? `<div style="font-size:.8rem;font-weight:600;color:#a8e6cf;margin-bottom:.2rem">T — Substance <span style="font-weight:400;color:var(--muted)">(constructiveness + analytical depth)</span></div>` : ''}
                 ${toneReason || '<span style="color:var(--muted)">No LLM tone analysis yet.</span>'}
+                ${defHtml}
             </div>
         </div>`;
     card.style.display = '';
