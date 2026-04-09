@@ -240,8 +240,10 @@ RULES:
 - Answering a direct question about oneself is NOT bragging. Correcting misinformation is NOT defensiveness.
 - Output ONE single JSON object. Do NOT produce separate objects for each behavior type.
 
+LANGUAGE: Write the "reason" field ENTIRELY IN ENGLISH.
+
 Respond with a single JSON object only:
-{"defensiveness": 0.0, "instances": 0, "reason": "max one sentence — cite comment numbers as evidence (e.g. '[12] dismissive reply'), or state none found"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "max one sentence in English — cite comment numbers as evidence (e.g. '[12] dismissive reply'), or state none found"}"""
 
 _DEFENSIVENESS_PROMPT_FR = """\
 IMPORTANT : Répondez uniquement en JSON. Pas de prose, pas d'explications, pas de markdown.
@@ -281,8 +283,10 @@ RÈGLES :
 - Répondre à une question directe sur soi n'est PAS de la vantardise. Corriger une erreur n'est PAS de la défensivité.
 - Produisez UN SEUL objet JSON. Ne produisez PAS d'objets séparés pour chaque type de comportement.
 
+LANGUE : Rédigez le champ "reason" ENTIÈREMENT EN FRANÇAIS.
+
 Répondez avec un seul objet JSON :
-{"defensiveness": 0.0, "instances": 0, "reason": "une phrase max — citez les numéros de commentaires comme preuves (ex. '[12] réponse dismissive'), ou indiquez qu'aucune n'a été trouvée"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "une phrase max en français — citez les numéros de commentaires comme preuves (ex. '[12] réponse méprisante'), ou indiquez qu'aucune n'a été trouvée"}"""
 
 _DEFENSIVENESS_PROMPT_ES = """\
 IMPORTANTE: Responde únicamente con JSON. Sin prosa, sin explicaciones, sin markdown.
@@ -322,8 +326,10 @@ REGLAS:
 - Responder una pregunta directa sobre uno mismo NO es fanfarronería. Corregir información errónea NO es defensividad.
 - Produce UN SOLO objeto JSON. NO produzcas objetos separados para cada tipo de comportamiento.
 
+IDIOMA: Escribe el campo "reason" ENTERAMENTE EN ESPAÑOL.
+
 Responde con un único objeto JSON:
-{"defensiveness": 0.0, "instances": 0, "reason": "máximo una frase — cita números de comentarios como evidencia (ej. '[12] respuesta desestimadora'), o indica que no se encontró ninguna"}"""
+{"defensiveness": 0.0, "instances": 0, "reason": "máximo una frase en español — cita números de comentarios como evidencia (ej. '[12] respuesta desestimadora'), o indica que no se encontró ninguna"}"""
 
 _DEFENSIVENESS_PROMPTS = {
     "french": _DEFENSIVENESS_PROMPT_FR,
