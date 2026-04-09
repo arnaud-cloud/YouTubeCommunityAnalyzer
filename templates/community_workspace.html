@@ -887,6 +887,10 @@ function pollCollectJob() {
                     label.textContent = 'Collection Complete';
                     status.textContent = '';
                     detail.textContent = data.detail || 'Done.';
+                    // Refresh coverage timeline to show new data
+                    window._coverageLoaded = false;
+                    const grid = document.getElementById('coverage-grid');
+                    if (grid) { grid.innerHTML = ''; loadCoverageTimeline(); }
                     setTimeout(() => { bar.style.display = 'none'; }, 5000);
                 } else if (data.status === 'error') {
                     bar.classList.add('llm-job-error');
