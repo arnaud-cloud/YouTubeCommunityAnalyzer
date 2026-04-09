@@ -49,6 +49,20 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <div class="workspace-panel active" id="panel-workflow">
 
+{# ── LLM job progress (tone scoring / creator analysis) ─────────── #}
+<div id="llm-job-bar" class="llm-job-bar" style="display:none">
+    <div class="llm-job-header">
+        <span class="llm-job-icon">&#9881;</span>
+        <span class="llm-job-label" id="llm-job-label">LLM Scoring</span>
+        <span class="llm-job-status" id="llm-job-status"></span>
+        <span class="llm-job-eta" id="llm-job-eta"></span>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill" id="llm-job-fill" style="width:0%"></div>
+    </div>
+    <div class="llm-job-detail" id="llm-job-detail"></div>
+</div>
+
 {# ── Active run ──────────────────────────────────────────────────── #}
 {% if active_run %}
 <div class="section">
@@ -828,6 +842,75 @@ function renderCoverage(channels, container) {
             });
         });
     }
+})();
+
+// ── LLM job progress polling ─────────────────────────────────────────
+(function() {
+    const bar = document.getElementById('llm-job-bar');
+    const label = document.getElementById('llm-job-label');
+    const status = document.getElementById('llm-job-status');
+    const eta = document.getElementById('llm-job-eta');
+    const fill = document.getElementById('llm-job-fill');
+    const detail = document.getElementById('llm-job-detail');
+    const pollUrl = '{{ url_for("gossip.tone_score_status", community_id=community.id) }}';
+
+    const SCOPE_LABELS = {
+        all: 'Tone Scoring — All Commenters',
+        creators: 'Tone Scoring — Creators Only',
+        creators_detailed: 'Deep Creator Analysis',
+    };
+
+    function formatEta(seconds) {
+        if (!seconds || seconds <= 0) return '';
+        if (seconds < 60) return `~${seconds}s remaining`;
+        if (seconds < 3600) return `~${Math.ceil(seconds / 60)}min remaining`;
+        return `~${(seconds / 3600).toFixed(1)}h remaining`;
+    }
+
+    function poll() {
+        fetch(pollUrl)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'idle') {
+                    bar.style.display = 'none';
+                    return;
+                }
+
+                bar.style.display = 'block';
+                bar.classList.remove('llm-job-done', 'llm-job-error');
+                const scopeLabel = SCOPE_LABELS[data.scope] || 'LLM Scoring';
+                label.textContent = scopeLabel;
+
+                if (data.status === 'running') {
+                    const done = data.done || 0;
+                    const total = data.total || 0;
+                    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+                    status.textContent = total > 0 ? `${done} / ${total}` : 'Starting...';
+                    fill.style.width = pct + '%';
+                    eta.textContent = formatEta(data.eta_seconds);
+                    detail.textContent = total > 0
+                        ? `Processing commenter ${done} of ${total} (${pct}%)`
+                        : 'Initializing...';
+                    setTimeout(poll, 2000);
+                } else if (data.status === 'done') {
+                    bar.classList.add('llm-job-done');
+                    status.textContent = 'Complete';
+                    fill.style.width = '100%';
+                    eta.textContent = '';
+                    detail.textContent = `Scored ${data.done || data.total || '?'} commenters.`;
+                    setTimeout(() => location.reload(), 3000);
+                } else if (data.status === 'error') {
+                    bar.classList.add('llm-job-error');
+                    status.textContent = 'Failed';
+                    eta.textContent = '';
+                    detail.textContent = data.error || 'An error occurred.';
+                }
+            })
+            .catch(() => setTimeout(poll, 5000));
+    }
+
+    // Start polling immediately — catches jobs already in progress
+    poll();
 })();
 
 // Run status polling (same as existing gossip_runs.html)

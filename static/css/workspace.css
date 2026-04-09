@@ -89,6 +89,71 @@
     gap: 0;
 }
 
+/* LLM job progress bar */
+.llm-job-bar {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-left: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1rem;
+    animation: pipe-pulse 2s ease-in-out infinite;
+}
+.llm-job-bar.llm-job-done {
+    border-color: var(--success);
+    animation: none;
+}
+.llm-job-bar.llm-job-error {
+    border-color: var(--error, #e74c3c);
+    animation: none;
+}
+.llm-job-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+.llm-job-icon {
+    font-size: 1rem;
+    animation: spin 2s linear infinite;
+}
+.llm-job-done .llm-job-icon { animation: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.llm-job-label {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.llm-job-status {
+    font-size: 0.82rem;
+    color: var(--accent);
+    font-weight: 600;
+}
+.llm-job-eta {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-left: auto;
+}
+.llm-job-bar .progress-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.35rem;
+}
+.llm-job-bar .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+.llm-job-done .progress-fill { background: var(--success); }
+.llm-job-detail {
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
 .wf-node {
     background: var(--bg);
     border: 2px solid var(--border);
